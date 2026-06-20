@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { insertCoin, getRoomCode } from "playroomkit";
 
 const FriendsGame = dynamic(
@@ -24,10 +24,29 @@ export default function FriendsPage() {
   const [mapIndex, setMapIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+  const [autoJoining, setAutoJoining] = useState(false);
 
   const gameId = process.env.NEXT_PUBLIC_PLAYROOM_GAME_ID;
+  const launched = useRef(false);
+
+  // PlayroomKit room codes are bare 4-char strings (e.g. "555H"). The URL it
+  // writes carries a 1-char region prefix (e.g. "#r=R555H") which it strips on
+  // URL-based joins. But roomCode passed as an option is used verbatim, so a
+  // pasted "R555H" (or full link) would create a wrong, double-prefixed room.
+  // Normalize anything the user gives us back down to the real room code.
+  const normalizeCode = (raw: string): string => {
+    let c = raw.trim();
+    const m = c.match(/[#&?]r=([^#&\s]+)/i); // full URL or hash fragment
+    if (m) c = m[1];
+    c = c.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (c.length > 4) c = c.slice(-4); // drop region prefix(es)
+    return c;
+  };
 
   const enter = async (code?: string) => {
+    if (launched.current) return;
+    launched.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -40,16 +59,42 @@ export default function FriendsPage() {
       setRoomCode(getRoomCode() ?? code ?? null);
       setPhase("playing");
     } catch (e) {
+      launched.current = false;
       setError(e instanceof Error ? e.message : "Failed to connect");
       setBusy(false);
     }
   };
 
+  // If the page is opened with a shared link (e.g. /frd#r=R555H), let PlayroomKit
+  // read the hash itself (no roomCode option → it applies its own region-strip).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (/[#&?]r=[^#&\s]+/i.test(window.location.hash)) {
+      setAutoJoining(true);
+      enter();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Safety net: never let the dark cover hang if onReady somehow doesn't fire.
+  useEffect(() => {
+    if (phase !== "playing") return;
+    const t = setTimeout(() => setReady(true), 5000);
+    return () => clearTimeout(t);
+  }, [phase]);
+
   // ── Playing: full-screen game + minimal HUD ──
   if (phase === "playing") {
     return (
-      <div className="fixed inset-0 bg-black">
-        <FriendsGame mapFile={MAPS[mapIndex].file} />
+      <div className="fixed inset-0 bg-[#0a0e1f]">
+        <FriendsGame mapFile={MAPS[mapIndex].file} onReady={() => setReady(true)} />
+
+        {!ready && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#0a0e1f] gap-4">
+            <div className="w-10 h-10 rounded-full border-2 border-white/20 border-t-white animate-spin" />
+            <p className="text-white/80 font-bold tracking-[0.3em] text-xs">ENTERING ARENA…</p>
+          </div>
+        )}
 
         <div className="absolute top-4 left-4 flex items-center gap-3 z-10">
           <div className="glass rounded-full px-4 py-2 flex items-center gap-2">
@@ -62,6 +107,12 @@ export default function FriendsPage() {
             className="glass rounded-full px-3 py-2 text-xs font-bold text-white hover:bg-white/10 transition-colors"
           >
             Copy code
+          </button>
+          <button
+            onClick={() => navigator.clipboard?.writeText(window.location.href)}
+            className="glass rounded-full px-3 py-2 text-xs font-bold text-white hover:bg-white/10 transition-colors"
+          >
+            Copy link
           </button>
         </div>
 
@@ -77,6 +128,15 @@ export default function FriendsPage() {
         >
           Leave
         </button>
+      </div>
+    );
+  }
+
+  if (autoJoining) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0a0e1f] gap-4">
+        <div className="w-10 h-10 rounded-full border-2 border-white/20 border-t-white animate-spin" />
+        <p className="text-white/80 font-bold tracking-[0.3em] text-xs">JOINING ROOM…</p>
       </div>
     );
   }
@@ -137,12 +197,12 @@ export default function FriendsPage() {
               <input
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                placeholder="ROOM CODE"
+                placeholder="ROOM CODE OR LINK"
                 className="flex-1 bg-white/70 border-2 border-[#161B32]/20 rounded-2xl px-4 py-3 text-[#161B32] font-bold font-mono tracking-widest text-center focus:outline-none focus:border-[#161B32]"
               />
               <button
-                onClick={() => enter(joinCode.trim())}
-                disabled={busy || joinCode.trim().length < 3}
+                onClick={() => enter(normalizeCode(joinCode))}
+                disabled={busy || normalizeCode(joinCode).length < 3}
                 className="bg-white/70 border-2 border-[#161B32]/20 text-[#161B32] px-6 rounded-2xl font-black hover:bg-white disabled:opacity-50 transition-colors"
               >
                 Join
