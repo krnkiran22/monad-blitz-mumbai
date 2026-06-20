@@ -26,11 +26,6 @@ export function HomeScreen({ walletAddress, monBalance, onPlay, onSettings, onCo
         <MenuScene />
       </div>
 
-      {/* Cinematic overlays for readability */}
-      <div className="absolute inset-0 z-[1] bg-gradient-to-b from-[#0a0613]/85 via-transparent to-[#0a0613]/95" />
-      <div className="absolute inset-0 z-[1] bg-gradient-to-r from-[#0a0613]/80 via-transparent to-[#0a0613]/40" />
-      <div className="absolute inset-0 z-[1] pointer-events-none" style={{ boxShadow: "inset 0 0 240px 60px rgba(10,6,19,0.9)" }} />
-
       {/* Top HUD bar */}
       <header className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-8 py-5">
         <div className="flex items-center gap-2.5">

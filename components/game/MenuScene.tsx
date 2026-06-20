@@ -8,26 +8,23 @@ import { CharacterSoldier } from "./CharacterSoldier";
 import { GameMap } from "./GameMap";
 import { AGENT_PERSONALITIES } from "../agent/brain";
 
-// Three hero soldiers posed for the main-menu hero shot.
+// Three hero soldiers posed for the main-menu hero shot — all facing the
+// camera and firing, so the menu reads as a live front-on firefight.
 const HEROES: {
   pos: [number, number, number];
   rot: [number, number, number];
   anim: string;
 }[] = [
-  { pos: [-3.2, 0, 1.5], rot: [0, 0.5, 0], anim: "Idle_Shoot" },
-  { pos: [0, 0, 0], rot: [0, 0.1, 0], anim: "Idle" },
-  { pos: [3.2, 0, 1.4], rot: [0, -0.5, 0], anim: "Idle_Shoot" },
+  { pos: [-3.4, 0, 1.8], rot: [0, 0.28, 0], anim: "Idle_Shoot" },
+  { pos: [0, 0, 0.6], rot: [0, 0, 0], anim: "Idle_Shoot" },
+  { pos: [3.4, 0, 1.8], rot: [0, -0.28, 0], anim: "Idle_Shoot" },
 ];
 
-function SlowOrbit() {
-  const { current: state } = useRef({ t: 0 });
-  useFrame(({ camera }, delta) => {
-    state.t += delta * 0.08;
-    const r = 11;
-    camera.position.x = Math.sin(state.t) * r;
-    camera.position.z = Math.cos(state.t) * r + 2;
-    camera.position.y = 4.5 + Math.sin(state.t * 0.6) * 0.6;
-    camera.lookAt(0, 1.4, 0);
+// Fixed front-on camera (no orbit) so the home screen shows the agents head-on.
+function StaticCam() {
+  useFrame(({ camera }) => {
+    camera.position.set(0, 3.2, 10.5);
+    camera.lookAt(0, 1.5, 0);
   });
   return null;
 }
@@ -108,7 +105,7 @@ export function MenuScene({ mapFile = "/models/map.glb" }: { mapFile?: string })
       </Suspense>
 
       <Dust />
-      <SlowOrbit />
+      <StaticCam />
     </Canvas>
   );
 }
