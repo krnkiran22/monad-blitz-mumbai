@@ -22,9 +22,9 @@ export function FriendsGame({ mapFile }: { mapFile: string }) {
         </Physics>
       </Suspense>
 
-      {/* Bloom makes the over-bright bullets glow like stellar_strike. */}
+      {/* Subtle bloom so the tracers glow just a little. */}
       <EffectComposer>
-        <Bloom luminanceThreshold={1} intensity={1.5} mipmapBlur />
+        <Bloom luminanceThreshold={1} intensity={0.4} mipmapBlur />
       </EffectComposer>
     </Canvas>
   );

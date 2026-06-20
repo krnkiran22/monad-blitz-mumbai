@@ -10,7 +10,7 @@ import { playSfx, SFX } from "./sfx";
 // Exact stellar_strike tracer: an over-bright hotpink box that blooms into a
 // glowing "fire" bullet under the EffectComposer Bloom pass.
 const bulletMaterial = new MeshBasicMaterial({ color: "hotpink", toneMapped: false });
-bulletMaterial.color.multiplyScalar(42);
+bulletMaterial.color.multiplyScalar(6);
 
 export interface BulletData {
   id: string;

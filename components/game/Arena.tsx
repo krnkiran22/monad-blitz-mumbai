@@ -48,7 +48,7 @@ const BULLET_FORWARD = new THREE.Vector3(0, 0, 1);
 // Over-bright hotpink tracer (matches the home screen + friends mode); blooms
 // into a glowing fire streak against the dark arena.
 const ARENA_BULLET_MATERIAL = new THREE.MeshBasicMaterial({ color: "hotpink", toneMapped: false });
-ARENA_BULLET_MATERIAL.color.multiplyScalar(42);
+ARENA_BULLET_MATERIAL.color.multiplyScalar(6);
 
 // Is the point inside any obstacle box (with optional inflation)? Used both for
 // bullet hits (y-aware) and agent collision (y ignored via full height span).
@@ -592,10 +592,9 @@ export function ArenaScene({
         <CameraRig autoRotate={settings.cameraAutoRotate && !running} />
       )}
 
-      {/* Glow pass: the over-bright tracers bloom into fire on the dark arena.
-          Threshold kept above lit-surface luminance so only bullets glow. */}
+      {/* Subtle glow pass: only the tracers bloom, and lightly. */}
       <EffectComposer>
-        <Bloom luminanceThreshold={1.2} intensity={1.4} mipmapBlur />
+        <Bloom luminanceThreshold={1.2} intensity={0.4} mipmapBlur />
       </EffectComposer>
     </Canvas>
   );

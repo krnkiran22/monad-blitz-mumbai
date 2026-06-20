@@ -11,7 +11,7 @@ import { AGENT_PERSONALITIES } from "../agent/brain";
 // Same over-bright hotpink tracer the gameplay uses, so it blooms into a
 // glowing "fire" streak under the EffectComposer pass.
 const MENU_BULLET_MATERIAL = new THREE.MeshBasicMaterial({ color: "hotpink", toneMapped: false });
-MENU_BULLET_MATERIAL.color.multiplyScalar(42);
+MENU_BULLET_MATERIAL.color.multiplyScalar(6);
 
 // Three agents in a line; 0 = left (red), 1 = middle (blue), 2 = right (green).
 const HERO_POS: [number, number, number][] = [
@@ -277,10 +277,10 @@ export function MenuScene() {
       <Dust />
       <StaticCam />
 
-      {/* High threshold so only the over-bright (x42) tracers bloom — the
-          brightly-lit soldiers stay crisp instead of washing out. */}
+      {/* High threshold + low intensity: just a faint glow on the tracers, no
+          big halo, and the brightly-lit soldiers stay crisp. */}
       <EffectComposer>
-        <Bloom luminanceThreshold={2.5} intensity={1.1} mipmapBlur />
+        <Bloom luminanceThreshold={2.5} intensity={0.4} mipmapBlur />
       </EffectComposer>
     </Canvas>
   );
