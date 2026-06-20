@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState, useEffect, Suspense } from "react";
+import { useRef, useState, useEffect, useMemo, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Text, Environment, Billboard } from "@react-three/drei";
+import { OrbitControls, Environment, Billboard } from "@react-three/drei";
 import { getState, setState } from "playroomkit";
 import * as THREE from "three";
 import {
@@ -31,6 +31,35 @@ const DEFAULT_SETTINGS: ArenaSettings = {
 
 const MAX_BULLETS = 80;
 const SNAPSHOT_INTERVAL = 70; // ms between host broadcasts (~14 Hz)
+
+// Floating name label drawn on a 2D canvas → sprite. Avoids drei <Text>
+// (troika) which spins up a WebGL context per label and exhausts the
+// browser's ~16 context limit, blanking the whole scene.
+function NameTag({ text, color }: { text: string; color: string }) {
+  const texture = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext("2d")!;
+    ctx.font = "bold 42px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 7;
+    ctx.strokeStyle = "rgba(0,0,0,0.85)";
+    ctx.strokeText(text, 128, 34);
+    ctx.fillStyle = color;
+    ctx.fillText(text, 128, 34);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.anisotropy = 4;
+    return tex;
+  }, [text, color]);
+
+  return (
+    <sprite position={[0, 2.55, 0]} scale={[1.5, 0.38, 1]}>
+      <spriteMaterial map={texture} transparent depthTest={false} toneMapped={false} />
+    </sprite>
+  );
+}
 
 interface BulletData {
   active: boolean;
@@ -89,11 +118,7 @@ function AgentSoldier({
         </Suspense>
       </group>
 
-      <Billboard position={[0, 2.5, 0]}>
-        <Text fontSize={0.32} color={personality.color} anchorX="center" outlineWidth={0.02} outlineColor="#000">
-          {personality.name}
-        </Text>
-      </Billboard>
+      <NameTag text={personality.name} color={personality.color} />
 
       <Billboard position={[0, 2.15, 0]}>
         <group>
