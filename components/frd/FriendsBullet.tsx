@@ -1,6 +1,6 @@
 "use client";
 
-import { RigidBody } from "@react-three/rapier";
+import { BallCollider, RigidBody } from "@react-three/rapier";
 import { useEffect, useRef } from "react";
 import { MeshBasicMaterial } from "three";
 import { WEAPON_OFFSET } from "./FriendsCharacterController";
@@ -28,7 +28,7 @@ export function FriendsBullet({
   position,
   onHit,
   speed = 1.5,
-}: BulletData & { onHit: (pos: { x: number; y: number; z: number }) => void }) {
+}: BulletData & { onHit: (pos: { x: number; y: number; z: number }, blood: boolean) => void }) {
   const rb = useRef<any>(null);
   const spawnTime = useRef(Date.now());
 
@@ -50,16 +50,23 @@ export function FriendsBullet({
           ref={rb}
           gravityScale={0}
           sensor
+          ccd
+          colliders={false}
           userData={{ type: "bullet", player, damage: 10 }}
           onIntersectionEnter={(e: any) => {
-            if (Date.now() - spawnTime.current < 200) return; // brief self-immunity
+            if (Date.now() - spawnTime.current < 120) return; // brief self-immunity
             const u = e.other.rigidBody?.userData;
             if (u?.type === "bullet" || u?.id === player || u?.player === player) return;
-            rb.current?.setEnabled(false);
+            // Stop the tracer on any solid hit, but only spray blood when it
+            // actually strikes a player — never on the wall behind them.
             const t = rb.current?.translation();
-            if (t) onHit({ x: t.x, y: t.y, z: t.z });
+            rb.current?.setEnabled(false);
+            if (t) onHit({ x: t.x, y: t.y, z: t.z }, u?.type === "player");
           }}
         >
+          {/* Fat, CCD-swept ball collider so a fast tracer can't tunnel past a
+              player; the visible tracer box is purely cosmetic. */}
+          <BallCollider args={[0.25]} position={[0, 0, 0.25]} />
           <mesh position-z={0.25} material={bulletMaterial} castShadow>
             <boxGeometry args={[0.05, 0.05, 0.5]} />
           </mesh>

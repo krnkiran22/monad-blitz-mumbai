@@ -65,14 +65,19 @@ export function FriendsExperience({ mapFile, onReady }: { mapFile: string; onRea
     shooter.setState("bullets", [...current, bullet]);
   };
 
-  const onHit = (bulletId: string, position: { x: number; y: number; z: number }) => {
+  const onHit = (
+    bulletId: string,
+    position: { x: number; y: number; z: number },
+    blood: boolean
+  ) => {
     const ownerId = bulletId.split("-")[0];
     const shooter = players.find((p) => p.id === ownerId);
     if (shooter) {
       const current = shooter.getState("bullets") || [];
       shooter.setState("bullets", current.filter((b: BulletData) => b.id !== bulletId));
     }
-    setHits((prev) => [...prev, { id: bulletId, position }]);
+    // Only spray blood for a real player hit — never on the map/walls.
+    if (blood) setHits((prev) => [...prev, { id: bulletId, position }]);
   };
 
   const onKilled = () => {
@@ -121,7 +126,7 @@ export function FriendsExperience({ mapFile, onReady }: { mapFile: string; onRea
       ))}
 
       {bullets.map((bullet) => (
-        <FriendsBullet key={bullet.id} {...bullet} onHit={(pos) => onHit(bullet.id, pos)} />
+        <FriendsBullet key={bullet.id} {...bullet} onHit={(pos, blood) => onHit(bullet.id, pos, blood)} />
       ))}
 
       {hits.map((hit) => (
