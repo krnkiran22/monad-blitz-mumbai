@@ -11,9 +11,9 @@ export interface AgentPersonality {
 }
 
 export const AGENT_PERSONALITIES: AgentPersonality[] = [
-  { name: "ALPHA", color: "#ef4444", aggression: 0.9, retreatThreshold: 15, speed: 1.1, fireRate: 300, weapon: "AK" },
-  { name: "BETA", color: "#3b82f6", aggression: 0.5, retreatThreshold: 40, speed: 0.9, fireRate: 500, weapon: "Sniper" },
-  { name: "GAMMA", color: "#22c55e", aggression: 0.7, retreatThreshold: 25, speed: 1.2, fireRate: 400, weapon: "SMG" },
+  { name: "Aniket Raikar", color: "#ef4444", aggression: 0.9, retreatThreshold: 15, speed: 1.1, fireRate: 300, weapon: "AK" },
+  { name: "Kartikey", color: "#3b82f6", aggression: 0.5, retreatThreshold: 40, speed: 0.9, fireRate: 500, weapon: "Sniper" },
+  { name: "Harpal", color: "#22c55e", aggression: 0.7, retreatThreshold: 25, speed: 1.2, fireRate: 400, weapon: "SMG" },
 ];
 
 export interface BotState {
@@ -35,6 +35,9 @@ export interface BotState {
   strafeDir: 1 | -1;
   coverPos: { x: number; z: number } | null;
   anim: string; // animation name, computed on host, mirrored to clients
+  kills: number; // confirmed kills this match (decides the winner)
+  deaths: number;
+  respawnAt: number; // timestamp when a dead bot comes back
 }
 
 /** Compact, network-friendly snapshot the host broadcasts each tick. */
@@ -47,6 +50,7 @@ export interface BotSnap {
   d: 0 | 1; // dead
   t: number; // target index
   an: string; // animation
+  k: number; // kills
 }
 
 const ARENA = 10;
@@ -87,7 +91,26 @@ export function createBots(): BotState[] {
     strafeDir: i % 2 === 0 ? 1 : -1,
     coverPos: null,
     anim: "Idle",
+    kills: 0,
+    deaths: 0,
+    respawnAt: 0,
   }));
+}
+
+/** Bring a dead bot back to life at its spawn point (kills/deaths preserved). */
+export function respawnBot(bot: BotState) {
+  bot.health = 100;
+  bot.dead = false;
+  bot.pos = { ...SPAWNS[bot.id] };
+  bot.vy = 0;
+  bot.moving = false;
+  bot.shooting = false;
+  bot.crouching = false;
+  bot.intent = "engage";
+  bot.coverPos = null;
+  bot.respawnAt = 0;
+  bot.lastThinkAt = 0;
+  bot.anim = "Idle";
 }
 
 export function botAnimation(bot: BotState): string {
@@ -293,6 +316,7 @@ export function snapshotBots(bots: BotState[]): BotSnap[] {
     d: b.dead ? 1 : 0,
     t: b.target,
     an: b.anim,
+    k: b.kills,
   }));
 }
 
@@ -310,6 +334,7 @@ export function applyBotSnapshot(bots: BotState[], snap: BotSnap[], smoothing: n
     bot.dead = s.d === 1;
     bot.target = s.t;
     bot.anim = s.an;
+    bot.kills = s.k;
     bot.moving = s.an === "Run" || s.an === "Run_Gun";
     bot.shooting = s.an === "Idle_Shoot" || s.an === "Run_Gun";
   });

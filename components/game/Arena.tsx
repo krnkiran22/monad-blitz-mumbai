@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, useMemo, Suspense } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Environment, Billboard } from "@react-three/drei";
 import { getState, setState } from "playroomkit";
 import * as THREE from "three";
@@ -11,6 +11,7 @@ import {
   botAnimation,
   snapshotBots,
   applyBotSnapshot,
+  respawnBot,
   BotState,
   AGENT_PERSONALITIES,
 } from "../agent/brain";
@@ -31,6 +32,13 @@ const DEFAULT_SETTINGS: ArenaSettings = {
 
 const MAX_BULLETS = 80;
 const SNAPSHOT_INTERVAL = 70; // ms between host broadcasts (~14 Hz)
+const MATCH_DURATION = 60; // seconds — deathmatch with respawns
+const RESPAWN_DELAY = 2800; // ms before a downed agent comes back
+
+export interface MatchStats {
+  timeLeft: number;
+  kills: number[];
+}
 
 // Floating name label drawn on a 2D canvas → sprite. Avoids drei <Text>
 // (troika) which spins up a WebGL context per label and exhausts the
@@ -211,63 +219,95 @@ function BulletSystem({
 }
 
 // ─── Host simulation: runs the AI, applies damage, broadcasts snapshots ───────
+// Deathmatch format: agents respawn for MATCH_DURATION seconds; the agent with
+// the most kills when the clock hits zero wins.
 function HostSimulation({
   botsRef,
   running,
   matchSpeed,
   onMatchEnd,
+  onStats,
 }: {
   botsRef: React.MutableRefObject<BotState[]>;
   running: boolean;
   matchSpeed: number;
   onMatchEnd: (winnerId: number) => void;
+  onStats: (stats: MatchStats) => void;
 }) {
   const endedRef = useRef(false);
   const lastBroadcast = useRef(0);
+  const lastStats = useRef(0);
+  const startedAt = useRef(0);
 
-  // Damage application only — bullet visuals are handled by BulletSystem.
+  // Damage application + kill crediting. Bullet visuals are handled separately.
   // Distance-based accuracy + modest damage keeps fights lasting long enough
   // to actually watch the agents run, strafe, jump and take cover.
   const applyShot = (from: BotState, target: BotState) => {
+    if (target.dead) return;
     const d = Math.hypot(target.pos.x - from.pos.x, target.pos.z - from.pos.z);
     const baseDmg = from.personality.weapon === "Sniper" ? 16 : from.personality.weapon === "SMG" ? 5 : 7;
-    // Closer shots are more accurate; a crouched target is harder to hit.
     let hitChance = Math.max(0.18, Math.min(0.8, 1 - d / 26));
     if (target.crouching) hitChance *= 0.45;
     if (target.pos.y > 0.3) hitChance *= 0.6; // mid-air dodge
     if (Math.random() > hitChance) return; // miss
     target.health = Math.max(0, target.health - baseDmg);
-    if (target.health <= 0) target.dead = true;
+    if (target.health <= 0) {
+      target.dead = true;
+      target.deaths += 1;
+      target.respawnAt = performance.now() + RESPAWN_DELAY;
+      from.kills += 1;
+    }
   };
 
+  // Arm the clock for a fresh match; the actual start time is stamped on the
+  // first running frame so a stale ref can never end the match instantly.
   useEffect(() => {
     endedRef.current = false;
+    startedAt.current = 0;
   }, [running]);
 
   useFrame((_, rawDelta) => {
     if (!running) return;
     const dt = Math.min(rawDelta, 0.05) * matchSpeed;
     const bots = botsRef.current;
+    const now = performance.now();
+    if (startedAt.current === 0) startedAt.current = now;
+    const elapsed = (now - startedAt.current) / 1000;
+
+    // Respawn any agent whose timer has elapsed.
+    bots.forEach((bot) => {
+      if (bot.dead && now >= bot.respawnAt) respawnBot(bot);
+    });
 
     bots.forEach((bot, i) => {
       const enemies = bots.filter((_, j) => j !== i);
-      tickBot(bot, enemies, dt, performance.now(), applyShot);
+      tickBot(bot, enemies, dt, now, applyShot);
     });
 
     // Broadcast a compact snapshot for everyone else in the room.
-    const now = performance.now();
     if (now - lastBroadcast.current > SNAPSHOT_INTERVAL) {
       lastBroadcast.current = now;
       setState("snapshot", snapshotBots(bots), false);
     }
 
-    if (!endedRef.current) {
-      const alive = bots.filter((b) => !b.dead);
-      if (alive.length === 1) {
-        endedRef.current = true;
-        setState("snapshot", snapshotBots(bots), true);
-        onMatchEnd(alive[0].id);
-      }
+    // Publish the live scoreboard / countdown a few times a second.
+    const timeLeft = Math.max(0, Math.ceil(MATCH_DURATION - elapsed));
+    if (now - lastStats.current > 250) {
+      lastStats.current = now;
+      onStats({ timeLeft, kills: bots.map((b) => b.kills) });
+    }
+
+    // Time's up → most kills wins (ties broken by fewer deaths, then health).
+    if (!endedRef.current && elapsed >= MATCH_DURATION) {
+      endedRef.current = true;
+      const winner = bots.reduce((best, b) => {
+        if (b.kills !== best.kills) return b.kills > best.kills ? b : best;
+        if (b.deaths !== best.deaths) return b.deaths < best.deaths ? b : best;
+        return b.health > best.health ? b : best;
+      });
+      onStats({ timeLeft: 0, kills: bots.map((b) => b.kills) });
+      setState("snapshot", snapshotBots(bots), true);
+      onMatchEnd(winner.id);
     }
   });
 
@@ -289,7 +329,7 @@ function ClientMirror({
   return null;
 }
 
-// ─── Camera rig ───────────────────────────────────────────────────────────────
+// ─── Free orbit camera (overview) ─────────────────────────────────────────────
 function CameraRig({ autoRotate }: { autoRotate: boolean }) {
   return (
     <OrbitControls
@@ -305,21 +345,69 @@ function CameraRig({ autoRotate }: { autoRotate: boolean }) {
   );
 }
 
+// ─── Spectator POV camera: chase-cam behind the selected agent ────────────────
+// Mirrors the stellar_strike follow-cam: sits above and behind the player,
+// looking slightly ahead of them. Smoothly lerps so cuts feel cinematic.
+function SpectatorCamera({
+  botsRef,
+  index,
+}: {
+  botsRef: React.MutableRefObject<BotState[]>;
+  index: number;
+}) {
+  const { camera } = useThree();
+  const desired = useRef(new THREE.Vector3());
+  const look = useRef(new THREE.Vector3());
+
+  useFrame((_, rawDelta) => {
+    const bot = botsRef.current[index];
+    if (!bot) return;
+    const dt = Math.min(rawDelta, 0.05);
+
+    // Behind the agent relative to its facing direction.
+    const fx = Math.sin(bot.angle);
+    const fz = Math.cos(bot.angle);
+    const dist = 7;
+    const height = 4.2;
+    desired.current.set(
+      bot.pos.x - fx * dist,
+      bot.pos.y + height,
+      bot.pos.z - fz * dist
+    );
+    // Look just ahead of the agent at chest height.
+    look.current.set(
+      bot.pos.x + fx * 2,
+      bot.pos.y + 1.4,
+      bot.pos.z + fz * 2
+    );
+
+    const k = 1 - Math.pow(0.001, dt); // frame-rate independent smoothing
+    camera.position.lerp(desired.current, k);
+    camera.lookAt(look.current);
+  });
+
+  return null;
+}
+
 // ─── Main Arena ────────────────────────────────────────────────────────────────
 interface ArenaSceneProps {
   onMatchEnd: (winnerId: number) => void;
+  onStats?: (stats: MatchStats) => void;
   running: boolean;
   isHost: boolean;
   mapFile?: string;
   settings?: ArenaSettings;
+  spectateIndex?: number; // -1 = free orbit, 0..2 = follow that agent
 }
 
 export function ArenaScene({
   onMatchEnd,
+  onStats,
   running,
   isHost,
   mapFile = "/models/map.glb",
   settings = DEFAULT_SETTINGS,
+  spectateIndex = -1,
 }: ArenaSceneProps) {
   const botsRef = useRef<BotState[]>(createBots());
   const bulletsRef = useRef<BulletData[]>(
@@ -372,12 +460,17 @@ export function ArenaScene({
           running={running}
           matchSpeed={settings.matchSpeed}
           onMatchEnd={onMatchEnd}
+          onStats={onStats ?? (() => {})}
         />
       ) : (
         <ClientMirror botsRef={botsRef} running={running} />
       )}
 
-      <CameraRig autoRotate={settings.cameraAutoRotate && !running} />
+      {spectateIndex >= 0 ? (
+        <SpectatorCamera botsRef={botsRef} index={spectateIndex} />
+      ) : (
+        <CameraRig autoRotate={settings.cameraAutoRotate && !running} />
+      )}
     </Canvas>
   );
 }

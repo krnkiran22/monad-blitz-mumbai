@@ -28,7 +28,7 @@ export interface ArenaState {
   myBets: [string, string, string];
 }
 
-const AGENT_NAMES = ["ALPHA", "BETA", "GAMMA"];
+const AGENT_NAMES = ["Aniket Raikar", "Kartikey", "Harpal"];
 const AGENT_COLORS = ["#ef4444", "#3b82f6", "#22c55e"];
 
 export function useArena(address?: string) {

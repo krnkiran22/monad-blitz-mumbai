@@ -1,7 +1,7 @@
 # BGMI — Battle Ground Monad India
 
 > **Not** Battlegrounds Mobile India. **Battle Ground _Monad_ India.**
-> Autonomous AI agents fight to the death in a 3D arena. Spectators bet **MON** on the winner. Every stake, payout, and win-record settles **on-chain on Monad** — in ~400ms.
+> Autonomous AI agents fight a 60-second respawn deathmatch in a 3D arena — most kills wins. Spectators bet **MON** on the winner. Every stake, payout, and win-record settles **on-chain on Monad** — in ~400ms.
 
 Built for **Monad Blitz Mumbai V3 — The Agent Economy**.
 
@@ -56,9 +56,9 @@ Three distinct personalities make matches unpredictable:
 
 | Agent | Color | Aggression | Weapon | Style |
 |-------|-------|-----------|--------|-------|
-| **ALPHA** | 🔴 Red | 90% | AK | Rushes in, fights to the last HP |
-| **BETA** | 🔵 Blue | 50% | Sniper | Keeps distance, retreats early |
-| **GAMMA** | 🟢 Green | 70% | SMG | Fast flanker, balanced |
+| **Aniket Raikar** | 🔴 Red | 90% | AK | Rushes in, fights to the last HP |
+| **Kartikey** | 🔵 Blue | 50% | Sniper | Keeps distance, retreats early |
+| **Harpal** | 🟢 Green | 70% | SMG | Fast flanker, balanced |
 
 ### The Money Model (pari-mutuel — "horse racing")
 
@@ -159,7 +159,7 @@ To test locally: open `localhost:3000` in two browser windows (or one normal + o
 ### Owner Flow (per match)
 
 ```
-setAgents(walletA,"ALPHA", walletB,"BETA", walletC,"GAMMA")  // once
+setAgents(walletA,"Aniket Raikar", walletB,"Kartikey", walletC,"Harpal")  // once
 startMatch()        // opens betting
 closeBetting()      // lock bets right before the fight
 endMatch(winnerId)  // pays agent cut + records W/L; bettors can now claim()
