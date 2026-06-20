@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+/* ── Monad brand palette ───────────────────────────────────────────────── */
+:root {
+  --monad-purple: #836ef9;
+  --monad-purple-light: #a78bfa;
+  --monad-purple-dark: #6246ea;
+  --monad-berry: #200052;
+  --monad-bg: #0a0613;
+  --monad-bg-2: #120a26;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--monad-bg);
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(131, 110, 249, 0.4);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(131, 110, 249, 0.7);
+}
+
+/* ── Animated gradient background ──────────────────────────────────────── */
+.monad-bg {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(131, 110, 249, 0.25), transparent),
+    radial-gradient(ellipse 60% 50% at 100% 100%, rgba(98, 70, 234, 0.18), transparent),
+    radial-gradient(ellipse 60% 50% at 0% 100%, rgba(167, 139, 250, 0.12), transparent),
+    var(--monad-bg);
+}
+
+.monad-grid::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(131, 110, 249, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(131, 110, 249, 0.07) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 40%, black, transparent);
+  pointer-events: none;
+}
+
+/* ── Glow / glass utilities ────────────────────────────────────────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(131, 110, 249, 0.18);
+  backdrop-filter: blur(12px);
+}
+
+.glow-purple {
+  box-shadow: 0 0 40px rgba(131, 110, 249, 0.35);
+}
+
+.text-glow {
+  text-shadow: 0 0 24px rgba(131, 110, 249, 0.6);
+}
+
+/* ── Title font treatment ──────────────────────────────────────────────── */
+.title-stroke {
+  -webkit-text-stroke: 1.5px rgba(131, 110, 249, 0.5);
+}
+
+/* ── Animations ────────────────────────────────────────────────────────── */
+@keyframes float-pulse {
+  0%, 100% { transform: translateY(0); opacity: 0.8; }
+  50% { transform: translateY(-8px); opacity: 1; }
+}
+.animate-float {
+  animation: float-pulse 4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.shimmer {
+  background: linear-gradient(90deg, #836ef9 0%, #ffffff 50%, #836ef9 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 4s linear infinite;
+}
+
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: spin-slow 18s linear infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  70% { transform: scale(1.4); opacity: 0; }
+  100% { opacity: 0; }
+}
+.pulse-ring {
+  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
