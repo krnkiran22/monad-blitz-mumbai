@@ -34,7 +34,7 @@ const DEFAULT_SETTINGS: ArenaSettings = {
 
 const MAX_BULLETS = 80;
 const SNAPSHOT_INTERVAL = 70; // ms between host broadcasts (~14 Hz)
-const MATCH_DURATION = 60; // seconds — deathmatch with respawns
+const MATCH_DURATION = 10; // seconds — deathmatch with respawns
 const RESPAWN_DELAY = 2800; // ms before a downed agent comes back
 
 export interface MatchStats {

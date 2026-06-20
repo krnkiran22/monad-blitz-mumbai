@@ -61,7 +61,7 @@ export function ArenaView({
   const [winner, setWinner] = useMultiplayerState<number | null>("winner", null);
   const [mapFile, setMapFile] = useMultiplayerState("mapFile", initialMapFile);
   const [stats, setStats] = useMultiplayerState<MatchStats>("stats", {
-    timeLeft: 60,
+    timeLeft: 10,
     kills: [0, 0, 0],
   });
 
@@ -102,7 +102,7 @@ export function ArenaView({
   const beginMatch = useCallback(() => {
     if (!isHost) return;
     setWinner(null);
-    setStats({ timeLeft: 60, kills: [0, 0, 0] });
+    setStats({ timeLeft: 10, kills: [0, 0, 0] });
     setMatchRunning(true);
   }, [isHost, setMatchRunning, setWinner, setStats]);
 
@@ -117,7 +117,7 @@ export function ArenaView({
       if (autoStarted.current) return;
       autoStarted.current = true;
       setWinner(null);
-      setStats({ timeLeft: 60, kills: [0, 0, 0] });
+      setStats({ timeLeft: 10, kills: [0, 0, 0] });
       setMatchRunning(true);
     }, 0);
     return () => clearTimeout(t);
@@ -258,7 +258,7 @@ export function ArenaView({
               </div>
               <div
                 className={`text-4xl font-black tabular-nums tracking-tight ${
-                  stats.timeLeft <= 10 ? "text-red-400 animate-pulse" : "text-white"
+                  stats.timeLeft <= 5 ? "text-red-400 animate-pulse" : "text-white"
                 }`}
                 style={{ textShadow: "0 2px 12px rgba(0,0,0,0.8)" }}
               >
