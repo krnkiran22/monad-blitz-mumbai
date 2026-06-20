@@ -37,7 +37,7 @@ interface Props {
   AGENT_COLORS: string[];
   onBack: () => void;
   onOpenSettings: () => void;
-  onClaim: (matchId: bigint) => void;
+  onClaim: (matchId: bigint) => Promise<void> | void;
   onSettleMatch: (winnerId: number) => Promise<void> | void;
 }
 
@@ -122,6 +122,17 @@ export function ArenaView({
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHost]);
+
+  // Claim winnings, then dismiss the result popup and return to the start
+  // screen. Only closes on success so a rejected tx keeps the claim available.
+  const handleClaim = useCallback(async () => {
+    try {
+      await onClaim(arenaState.matchId);
+      setWinner(null);
+    } catch {
+      // tx rejected / failed — leave the popup up so they can retry
+    }
+  }, [onClaim, arenaState.matchId, setWinner]);
 
   // Cycle the spectator POV. -1 (free) → 0 → 1 → 2 → -1 …
   const cycleSpectate = useCallback((dir: 1 | -1) => {
@@ -334,7 +345,7 @@ export function ArenaView({
 
                 {parseFloat(arenaState.claimable) > 0 ? (
                   <button
-                    onClick={() => onClaim(arenaState.matchId)}
+                    onClick={handleClaim}
                     disabled={loading}
                     className="w-full py-3 rounded-xl bg-linear-to-r from-emerald-500 to-green-500 hover:opacity-90 disabled:opacity-50 font-black text-white tracking-wide transition-opacity flex items-center justify-center gap-2"
                   >

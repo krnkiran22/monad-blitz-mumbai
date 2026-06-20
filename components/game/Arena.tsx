@@ -123,6 +123,14 @@ interface BulletData {
   vel: THREE.Vector3;
 }
 
+// Shortest-path angle interpolation so facing changes never spin the model.
+function lerpAngle(a: number, b: number, t: number): number {
+  let d = b - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
+}
+
 // ─── One AI soldier (reads from the shared bots ref, host or client) ──────────
 function AgentSoldier({
   index,
@@ -139,14 +147,25 @@ function AgentSoldier({
   const [anim, setAnim] = useState("Idle");
   const personality = AGENT_PERSONALITIES[index];
 
-  useFrame(() => {
+  useFrame((_, rawDelta) => {
     const bot = botsRef.current[index];
     if (!bot || !posGroup.current || !rotGroup.current) return;
 
-    // Group stays on the ground (ring/labels); only the soldier model jumps.
-    posGroup.current.position.set(bot.pos.x, 0, bot.pos.z);
-    rotGroup.current.rotation.y = bot.angle;
-    rotGroup.current.position.y = bot.pos.y;
+    const dt = Math.min(rawDelta, 0.05);
+    const k = Math.min(1, dt * 16); // frame-rate-independent smoothing
+    const p = posGroup.current.position;
+
+    // Snap on big jumps (spawn / respawn teleport); otherwise glide smoothly so
+    // any per-tick jitter in the sim never shows up as stutter.
+    if (Math.hypot(p.x - bot.pos.x, p.z - bot.pos.z) > 3) {
+      p.set(bot.pos.x, 0, bot.pos.z);
+      rotGroup.current.rotation.y = bot.angle;
+    } else {
+      p.x = THREE.MathUtils.lerp(p.x, bot.pos.x, k);
+      p.z = THREE.MathUtils.lerp(p.z, bot.pos.z, k);
+      rotGroup.current.rotation.y = lerpAngle(rotGroup.current.rotation.y, bot.angle, k);
+    }
+    rotGroup.current.position.y = bot.pos.y; // jump is instantaneous
 
     const nextAnim = botAnimation(bot);
     if (nextAnim !== anim) setAnim(nextAnim);
@@ -337,12 +356,19 @@ function HostSimulation({
 
     const obstacles = obstaclesRef.current;
     bots.forEach((bot, i) => {
+      const px = bot.pos.x;
+      const pz = bot.pos.z;
       const enemies = bots.filter((_, j) => j !== i);
       tickBot(bot, enemies, dt, now, applyShot, obstacles);
       // Safety net: if steering still let it clip a prop, push it back out.
       if (obstacles.length) resolveAgentCollision(bot.pos, obstacles);
       bot.pos.x = Math.max(-10, Math.min(10, bot.pos.x));
       bot.pos.z = Math.max(-10, Math.min(10, bot.pos.z));
+      // Anti-stuck: if it tried to move but barely advanced (blocked by a prop or
+      // the wall), stop the run cycle so it doesn't sprint in place.
+      if (bot.moving && Math.hypot(bot.pos.x - px, bot.pos.z - pz) < dt * 0.6) {
+        bot.moving = false;
+      }
     });
 
     // Broadcast a compact snapshot for everyone else in the room.
