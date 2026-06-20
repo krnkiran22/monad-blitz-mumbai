@@ -5,6 +5,7 @@ import { Billboard, CameraControls } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { CapsuleCollider, RigidBody } from "@react-three/rapier";
 import { CharacterSoldier } from "../game/CharacterSoldier";
+import { playSfx, SFX } from "./sfx";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // Tuned to match stellar_strike's feel exactly.
@@ -203,6 +204,7 @@ export function FriendsCharacterController({ state, userPlayer, onFire, onKilled
             isDeadRef.current = true;
             state.setState("dead", true);
             state.setState("health", 0);
+            playSfx(SFX.dead, 0.5);
             rigidbody.current?.setEnabled(false);
             setTimeout(() => {
               spawnRandomly();
@@ -215,6 +217,7 @@ export function FriendsCharacterController({ state, userPlayer, onFire, onKilled
             onKilled(state.id, u.player);
           } else {
             state.setState("health", newHealth);
+            playSfx(SFX.hurt, 0.4);
           }
         }}
       >

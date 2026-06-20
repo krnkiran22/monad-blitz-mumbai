@@ -4,6 +4,7 @@ import { RigidBody } from "@react-three/rapier";
 import { useEffect, useRef } from "react";
 import { MeshBasicMaterial } from "three";
 import { WEAPON_OFFSET } from "./FriendsCharacterController";
+import { playSfx, SFX } from "./sfx";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // Exact stellar_strike tracer: an over-bright hotpink box that blooms into a
@@ -32,6 +33,9 @@ export function FriendsBullet({
   const spawnTime = useRef(Date.now());
 
   useEffect(() => {
+    // Gunshot on spawn — same as stellar_strike's Bullet, so every shot
+    // (yours and your friends') is audible.
+    playSfx(SFX.rifle, 0.5);
     rb.current?.setLinvel(
       { x: Math.sin(angle) * speed * 20, y: 0, z: Math.cos(angle) * speed * 20 },
       true
