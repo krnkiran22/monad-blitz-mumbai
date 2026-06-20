@@ -106,9 +106,10 @@ export function ArenaView({
     setMatchRunning(true);
   }, [isHost, setMatchRunning, setWinner, setStats]);
 
-  // Kick the fight off shortly after the host enters. The guard lives inside the
-  // timer (not the effect body) so React Strict Mode's mount/cleanup/mount cycle
-  // still reschedules, while the start itself only ever runs once.
+  // Bets were placed in the lobby, so the fight starts the instant the host
+  // enters the arena — no "ready" prompt. The guard lives inside the (0 ms)
+  // timer so React Strict Mode's mount/cleanup/mount cycle still reschedules,
+  // while the start itself only ever runs once.
   const autoStarted = useRef(false);
   useEffect(() => {
     if (!isHost) return;
@@ -118,7 +119,7 @@ export function ArenaView({
       setWinner(null);
       setStats({ timeLeft: 60, kills: [0, 0, 0] });
       setMatchRunning(true);
-    }, 1600);
+    }, 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHost]);
@@ -237,23 +238,13 @@ export function ArenaView({
             spectateIndex={spectateIndex}
           />
 
-          {!matchRunning && winner === null && (
+          {!matchRunning && winner === null && !isHost && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center glass rounded-2xl p-8 max-w-sm">
-                <h2 className="text-2xl font-black mb-2 shimmer">READY TO BATTLE</h2>
-                <p className="text-gray-400 text-sm mb-5">
-                  {isHost
-                    ? "Bets are locked. 3 AI agents fight a 60-second deathmatch with respawns — most kills wins. Starting the fight…"
-                    : "Waiting for the host to start the match. You'll watch the same fight in real time."}
+                <h2 className="text-2xl font-black mb-2 shimmer">GET READY</h2>
+                <p className="text-gray-400 text-sm">
+                  Waiting for the host to start the match. You&apos;ll watch the same fight in real time.
                 </p>
-                {isHost && (
-                  <button
-                    onClick={beginMatch}
-                    className="px-6 py-2.5 rounded-xl bg-linear-to-r from-[#836ef9] to-[#6246ea] hover:opacity-90 font-black text-white tracking-wide transition-opacity"
-                  >
-                    START NOW
-                  </button>
-                )}
               </div>
             </div>
           )}
