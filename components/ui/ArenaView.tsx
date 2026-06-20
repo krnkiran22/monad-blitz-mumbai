@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMultiplayerState } from "playroomkit";
 import { BettingPanel } from "./BettingPanel";
 import { Dashboard } from "./Dashboard";
+import { PreMatchBetModal } from "./PreMatchBetModal";
 import { MonadMark, MonadCoin } from "./MonadMark";
 import { useMultiplayer } from "../game/multiplayer";
 import { AGENT_PERSONALITIES } from "../agent/brain";
@@ -43,6 +44,9 @@ interface Props {
   onConnectWallet: () => void;
   onBet: (agentId: number, amount: string) => void;
   onClaim: (matchId: bigint) => void;
+  onOpenBetting: () => Promise<void> | void;
+  onLockBetting: () => Promise<void> | void;
+  onSettleMatch: (winnerId: number) => Promise<void> | void;
 }
 
 export function ArenaView({
@@ -59,8 +63,12 @@ export function ArenaView({
   onConnectWallet,
   onBet,
   onClaim,
+  onOpenBetting,
+  onLockBetting,
+  onSettleMatch,
 }: Props) {
   const { isHost, roomCode, playerCount } = useMultiplayer();
+  const [betModalOpen, setBetModalOpen] = useState(false);
 
   // Host-authoritative match state, mirrored to every spectator in the room.
   const [matchRunning, setMatchRunning] = useMultiplayerState("matchRunning", false);
@@ -82,12 +90,18 @@ export function ArenaView({
   }, [isHost, initialMapFile, setMapFile]);
 
   const handleMatchEnd = useCallback(
-    (winnerId: number) => {
+    async (winnerId: number) => {
       if (!isHost) return;
       setMatchRunning(false);
       setWinner(winnerId);
+      // Settle the match on-chain so winning bettors can claim.
+      try {
+        await onSettleMatch(winnerId);
+      } catch {
+        // owner-only / no active round — keep the visual result regardless
+      }
     },
-    [isHost, setMatchRunning, setWinner]
+    [isHost, setMatchRunning, setWinner, onSettleMatch]
   );
 
   const handleStats = useCallback(
@@ -97,12 +111,25 @@ export function ArenaView({
     [isHost, setStats]
   );
 
-  const handleStartMatch = useCallback(() => {
+  // START MATCH now opens the betting gate first.
+  const handleStartPressed = useCallback(() => {
     if (!isHost) return;
+    setBetModalOpen(true);
+  }, [isHost]);
+
+  // Lock the on-chain bets, then run the visual fight for the whole room.
+  const handleStartFight = useCallback(async () => {
+    if (!isHost) return;
+    try {
+      await onLockBetting();
+    } catch {
+      // betting may already be closed / not owner — start the fight anyway
+    }
+    setBetModalOpen(false);
     setWinner(null);
     setStats({ timeLeft: 60, kills: [0, 0, 0] });
     setMatchRunning(true);
-  }, [isHost, setMatchRunning, setWinner, setStats]);
+  }, [isHost, onLockBetting, setMatchRunning, setWinner, setStats]);
 
   // Cycle the spectator POV. -1 (free) → 0 → 1 → 2 → -1 …
   const cycleSpectate = useCallback((dir: 1 | -1) => {
@@ -305,7 +332,18 @@ export function ArenaView({
                     ))}
                 </div>
 
-                <p className="text-gray-400 text-xs">Result recorded on Monad Testnet · winners can claim payouts</p>
+                {parseFloat(arenaState.claimable) > 0 ? (
+                  <button
+                    onClick={() => onClaim(arenaState.matchId)}
+                    disabled={loading}
+                    className="w-full py-3 rounded-xl bg-linear-to-r from-emerald-500 to-green-500 hover:opacity-90 disabled:opacity-50 font-black text-white tracking-wide transition-opacity flex items-center justify-center gap-2"
+                  >
+                    <MonadCoin size={18} />
+                    {loading ? "CLAIMING…" : `CLAIM ${parseFloat(arenaState.claimable).toFixed(3)} MON`}
+                  </button>
+                ) : (
+                  <p className="text-gray-400 text-xs">Result recorded on Monad Testnet · winners can claim payouts</p>
+                )}
               </div>
             </div>
           )}
@@ -381,12 +419,28 @@ export function ArenaView({
               loading={loading}
               isHost={isHost}
               onClaim={() => onClaim(arenaState.matchId)}
-              onStartMatch={handleStartMatch}
+              onStartMatch={handleStartPressed}
               colors={AGENT_COLORS}
             />
           </div>
         </div>
       </div>
+
+      <PreMatchBetModal
+        open={betModalOpen}
+        arenaState={arenaState}
+        names={AGENT_NAMES}
+        colors={AGENT_COLORS}
+        walletAddress={walletAddress}
+        monBalance={monBalance}
+        loading={loading}
+        defaultBet={settings.betStep}
+        onConnect={onConnectWallet}
+        onOpenBetting={onOpenBetting}
+        onPlaceBet={onBet}
+        onStartFight={handleStartFight}
+        onClose={() => setBetModalOpen(false)}
+      />
     </div>
   );
 }

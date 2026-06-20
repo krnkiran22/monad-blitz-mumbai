@@ -20,6 +20,34 @@ export const ARENA_CONTRACT_ADDRESS = (process.env.NEXT_PUBLIC_ARENA_ADDRESS ||
 export const ARENA_ABI = [
   {
     inputs: [],
+    name: "owner",
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "startMatch",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "closeBetting",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "winnerId", type: "uint8" }],
+    name: "endMatch",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
     name: "matchId",
     outputs: [{ type: "uint256" }],
     stateMutability: "view",

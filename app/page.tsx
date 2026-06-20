@@ -29,6 +29,9 @@ function Game() {
     connectWallet,
     placeBet,
     claimWinnings,
+    openBetting,
+    lockBetting,
+    settleMatch,
     AGENT_COLORS,
   } = useArena();
 
@@ -89,6 +92,9 @@ function Game() {
         onConnectWallet={connectWallet}
         onBet={placeBet}
         onClaim={claimWinnings}
+        onOpenBetting={openBetting}
+        onLockBetting={lockBetting}
+        onSettleMatch={settleMatch}
       />
       <SettingsModal
         open={settingsOpen}

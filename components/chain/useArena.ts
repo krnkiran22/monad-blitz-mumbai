@@ -26,6 +26,9 @@ export interface ArenaState {
   totalPot: string;
   agents: AgentInfo[];
   myBets: [string, string, string];
+  claimable: string; // MON the connected wallet can claim for the current match
+  matchSettled: boolean; // current match has been settled on-chain
+  isOwner: boolean; // connected wallet owns the contract (can run matches)
 }
 
 const AGENT_NAMES = ["Aniket Raikar", "Kartikey", "Harpal"];
@@ -47,6 +50,9 @@ export function useArena(address?: string) {
       totalBet: "0",
     })),
     myBets: ["0", "0", "0"],
+    claimable: "0",
+    matchSettled: false,
+    isOwner: false,
   });
   const [loading, setLoading] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string>(address || "");
@@ -91,7 +97,16 @@ export function useArena(address?: string) {
         )
       );
 
+      const [matchSettled, owner] = await Promise.all([
+        client.readContract({
+          address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI,
+          functionName: "matchSettled", args: [matchId],
+        }),
+        client.readContract({ address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI, functionName: "owner" }),
+      ]);
+
       let myBets: [string, string, string] = ["0", "0", "0"];
+      let claimable = "0";
       if (walletAddress) {
         const myBetAmounts = await Promise.all(
           [0, 1, 2].map((i) =>
@@ -103,6 +118,12 @@ export function useArena(address?: string) {
           )
         );
         myBets = myBetAmounts.map((b) => formatEther(b as bigint)) as [string, string, string];
+
+        const claim = await client.readContract({
+          address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI,
+          functionName: "previewClaim", args: [matchId, walletAddress as `0x${string}`],
+        });
+        claimable = formatEther(claim as bigint);
       }
 
       const betAmountsArr = betAmounts as [bigint, bigint, bigint];
@@ -122,6 +143,11 @@ export function useArena(address?: string) {
           totalBet: formatEther(betAmountsArr[i]),
         })),
         myBets,
+        claimable,
+        matchSettled: matchSettled as boolean,
+        isOwner:
+          !!walletAddress &&
+          (owner as string).toLowerCase() === walletAddress.toLowerCase(),
       });
     } catch {
       // Contract not deployed yet - use mock state for development
@@ -163,6 +189,57 @@ export function useArena(address?: string) {
     }
   };
 
+  // ── Owner-only match orchestration (host runs the on-chain round) ──────────
+  const ownerTx = async (functionName: "startMatch" | "closeBetting") => {
+    if (!walletAddress) { await connectWallet(); return; }
+    setLoading(true);
+    try {
+      const wc = getWalletClient();
+      if (!wc) throw new Error("No wallet");
+      const hash = await wc.writeContract({
+        address: ARENA_CONTRACT_ADDRESS,
+        abi: ARENA_ABI,
+        functionName,
+        account: walletAddress as `0x${string}`,
+      });
+      await getPublicClient().waitForTransactionReceipt({ hash });
+      await refresh();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /** Open a fresh betting round on-chain (owner). Safe to skip if already open. */
+  const openBetting = async () => {
+    await ownerTx("startMatch");
+  };
+
+  /** Stop accepting bets right before the fight begins (owner). */
+  const lockBetting = async () => {
+    await ownerTx("closeBetting");
+  };
+
+  /** Settle the match with the winning agent + pay the agent cut (owner). */
+  const settleMatch = async (winnerId: number) => {
+    if (!walletAddress) return;
+    setLoading(true);
+    try {
+      const wc = getWalletClient();
+      if (!wc) throw new Error("No wallet");
+      const hash = await wc.writeContract({
+        address: ARENA_CONTRACT_ADDRESS,
+        abi: ARENA_ABI,
+        functionName: "endMatch",
+        args: [winnerId as 0 | 1 | 2],
+        account: walletAddress as `0x${string}`,
+      });
+      await getPublicClient().waitForTransactionReceipt({ hash });
+      await refresh();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const claimWinnings = async (matchId: bigint) => {
     if (!walletAddress) return;
     setLoading(true);
@@ -191,6 +268,9 @@ export function useArena(address?: string) {
     connectWallet,
     placeBet,
     claimWinnings,
+    openBetting,
+    lockBetting,
+    settleMatch,
     refresh,
     AGENT_COLORS,
   };
