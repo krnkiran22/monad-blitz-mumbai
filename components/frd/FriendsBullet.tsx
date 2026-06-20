@@ -6,8 +6,10 @@ import { MeshBasicMaterial } from "three";
 import { WEAPON_OFFSET } from "./FriendsCharacterController";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const bulletMaterial = new MeshBasicMaterial({ color: "#ff6a00", toneMapped: false });
-bulletMaterial.color.multiplyScalar(24);
+// Exact stellar_strike tracer: an over-bright hotpink box that blooms into a
+// glowing "fire" bullet under the EffectComposer Bloom pass.
+const bulletMaterial = new MeshBasicMaterial({ color: "hotpink", toneMapped: false });
+bulletMaterial.color.multiplyScalar(42);
 
 export interface BulletData {
   id: string;
@@ -55,7 +57,7 @@ export function FriendsBullet({
           }}
         >
           <mesh position-z={0.25} material={bulletMaterial} castShadow>
-            <boxGeometry args={[0.07, 0.07, 0.5]} />
+            <boxGeometry args={[0.05, 0.05, 0.5]} />
           </mesh>
         </RigidBody>
       </group>

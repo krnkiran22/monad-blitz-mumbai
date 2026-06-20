@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Color, MathUtils, Vector3 } from "three";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const hitColor = new Color("#ff6a00");
+const hitColor = new Color("red");
 hitColor.multiplyScalar(12);
 
 function AnimatedBox({ scale, target, speed }: { scale: number; target: Vector3; speed: number }) {

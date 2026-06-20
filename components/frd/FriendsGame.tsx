@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import { FriendsExperience } from "./FriendsExperience";
 
 // Full-screen playable canvas. The follow camera lives in the character
@@ -20,6 +21,11 @@ export function FriendsGame({ mapFile }: { mapFile: string }) {
           <FriendsExperience mapFile={mapFile} />
         </Physics>
       </Suspense>
+
+      {/* Bloom makes the over-bright bullets glow like stellar_strike. */}
+      <EffectComposer>
+        <Bloom luminanceThreshold={1} intensity={1.5} mipmapBlur />
+      </EffectComposer>
     </Canvas>
   );
 }
