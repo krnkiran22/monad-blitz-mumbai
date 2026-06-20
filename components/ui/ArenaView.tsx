@@ -117,19 +117,22 @@ export function ArenaView({
     setBetModalOpen(true);
   }, [isHost]);
 
-  // Lock the on-chain bets, then run the visual fight for the whole room.
+  // Lock the on-chain bets (only if a round is actually open), then run the
+  // visual fight for the whole room.
   const handleStartFight = useCallback(async () => {
     if (!isHost) return;
-    try {
-      await onLockBetting();
-    } catch {
-      // betting may already be closed / not owner — start the fight anyway
+    if (walletAddress && arenaState.bettingOpen) {
+      try {
+        await onLockBetting();
+      } catch {
+        // not owner / already closed — start the fight anyway
+      }
     }
     setBetModalOpen(false);
     setWinner(null);
     setStats({ timeLeft: 60, kills: [0, 0, 0] });
     setMatchRunning(true);
-  }, [isHost, onLockBetting, setMatchRunning, setWinner, setStats]);
+  }, [isHost, walletAddress, arenaState.bettingOpen, onLockBetting, setMatchRunning, setWinner, setStats]);
 
   // Cycle the spectator POV. -1 (free) → 0 → 1 → 2 → -1 …
   const cycleSpectate = useCallback((dir: 1 | -1) => {

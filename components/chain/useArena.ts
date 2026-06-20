@@ -160,10 +160,68 @@ export function useArena(address?: string) {
     return () => clearInterval(interval);
   }, [refresh]);
 
+  // Keep the app in sync when the user switches accounts inside MetaMask.
+  useEffect(() => {
+    const eth =
+      typeof window !== "undefined"
+        ? (window.ethereum as unknown as {
+            on?: (e: string, cb: (a: unknown) => void) => void;
+            removeListener?: (e: string, cb: (a: unknown) => void) => void;
+          })
+        : undefined;
+    if (!eth?.on) return;
+    const handle = (accounts: unknown) => {
+      setWalletAddress(((accounts as string[]) || [])[0] || "");
+    };
+    eth.on("accountsChanged", handle);
+    return () => eth.removeListener?.("accountsChanged", handle);
+  }, []);
+
   const connectWallet = async () => {
-    const wc = getWalletClient();
-    if (!wc) { alert("Install MetaMask"); return; }
-    const [addr] = await wc.requestAddresses();
+    if (typeof window === "undefined" || !window.ethereum) return; // no injected wallet
+    const eth = window.ethereum as unknown as {
+      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+    };
+
+    // Force MetaMask to show its account picker every time so the user can pick
+    // (or switch to) the exact account they want. eth_requestAccounts on its own
+    // silently reuses whatever account was connected last and never re-prompts.
+    try {
+      await eth.request({
+        method: "wallet_requestPermissions",
+        params: [{ eth_accounts: {} }],
+      });
+    } catch {
+      // user dismissed the picker without choosing — keep current selection
+    }
+
+    const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[];
+    const addr = accounts?.[0];
+    if (!addr) return;
+
+    // Make sure the selected account is pointed at Monad testnet (0x279f = 10143).
+    try {
+      await eth.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: "0x279f" }],
+      });
+    } catch (err) {
+      if ((err as { code?: number })?.code === 4902) {
+        await eth.request({
+          method: "wallet_addEthereumChain",
+          params: [
+            {
+              chainId: "0x279f",
+              chainName: "Monad Testnet",
+              nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
+              rpcUrls: ["https://testnet-rpc.monad.xyz"],
+              blockExplorerUrls: ["https://testnet.monadexplorer.com"],
+            },
+          ],
+        });
+      }
+    }
+
     setWalletAddress(addr);
     return addr;
   };

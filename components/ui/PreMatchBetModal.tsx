@@ -79,9 +79,14 @@ export function PreMatchBetModal({
             </button>
           ) : (
             <div className="flex items-center justify-between glass rounded-xl px-4 py-2.5">
-              <span className="text-xs text-gray-400 font-mono">
+              <button
+                onClick={onConnect}
+                title="Switch account"
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white font-mono transition-colors"
+              >
                 {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}
-              </span>
+                <span className="text-[10px] font-sans font-bold text-[#836ef9]">switch</span>
+              </button>
               <span className="flex items-center gap-1.5 text-white font-bold text-sm">
                 <MonadCoin size={16} /> {monBalance} MON
               </span>
@@ -180,15 +185,17 @@ export function PreMatchBetModal({
               >
                 {loading ? "Please wait…" : hasBet ? "LOCK BETS & START FIGHT" : "Place at least one bet"}
               </button>
-              <button
-                onClick={onStartFight}
-                disabled={loading}
-                className="w-full text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
-              >
-                Skip betting & just watch
-              </button>
             </>
           )}
+
+          {/* Always allow starting without betting (pure spectating). */}
+          <button
+            onClick={onStartFight}
+            disabled={loading}
+            className="w-full text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            Skip betting &amp; just watch
+          </button>
         </div>
       </div>
     </div>
