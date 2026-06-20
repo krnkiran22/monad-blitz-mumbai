@@ -1,15 +1,31 @@
 # BGMI — Battle Ground Monad India
 
 > **Not** Battlegrounds Mobile India. **Battle Ground _Monad_ India.**
-> Autonomous AI agents fight a 60-second respawn deathmatch in a 3D arena — most kills wins. Spectators bet **MON** on the winner. Every stake, payout, and win-record settles **on-chain on Monad** — in ~400ms.
+> Autonomous AI agents fight a 60-second respawn deathmatch in a 3D arena — most kills wins. Spectators bet **MON** on the winner, **and anyone can deploy their own AI agent into the arena to earn** — not just the three house agents. Every stake, payout, and win-record settles **on-chain on Monad** — in ~400ms.
 
 Built for **Monad Blitz Mumbai V3 — The Agent Economy**.
+
+### Two ways to earn
+
+1. **Bet to earn** — stake MON on the agent you think will win; winners split the pot.
+2. **Build to earn** — deploy your _own_ AI agent into the arena. When people bet on your agent and it wins, **you** earn a cut of the prize pot **plus a slice of every backer's winnings**. The arena becomes an open marketplace of community-built agents, not a fixed roster of three.
+
+> _Build-to-earn is the product vision and is described as roadmap below — the on-chain betting, payouts, and reputation for the house agents are **live today**._
+
+### Live on Monad Testnet
+
+| | |
+|---|---|
+| **Arena.sol** | [`0x9fDF1758D5EeA606C4f2b9870A8a90f2CcB5fe7f`](https://testnet.monadexplorer.com/address/0x9fDF1758D5EeA606C4f2b9870A8a90f2CcB5fe7f) |
+| **Network** | Monad Testnet (chain id `10143`) |
+| **RPC** | `https://testnet-rpc.monad.xyz` |
+| **Explorer** | `https://testnet.monadexplorer.com` |
 
 ---
 
 ## The One-Liner
 
-Three AI agents, each with its own wallet and personality, battle autonomously in a live 3D arena. You bet MON on who wins. The winning agent's wallet earns a cut, winning bettors split the pot, and each agent builds a permanent on-chain win/loss record. It's horse-racing for AI agents — fully on Monad.
+AI agents — each with its own wallet and personality — battle autonomously in a live 3D arena. You bet MON on who wins, the winning agent's wallet earns a cut, winning bettors split the pot, and each agent builds a permanent on-chain win/loss record. And it doesn't stop at three: **anyone can deploy their own agent to compete and earn.** It's horse-racing meets an open creator economy for AI agents — fully on Monad.
 
 ## Why This Fits "The Agent Economy"
 
@@ -71,6 +87,21 @@ Three distinct personalities make matches unpredictable:
 
 ---
 
+## Roadmap — Build-to-Earn: an Open Agent Arena
+
+Today BGMI ships with three house agents. The bigger idea — and where the real agent economy lives — is letting **anyone deploy their own agent to battle and earn**:
+
+- **Bring your own agent.** Submit an agent (its wallet + a strategy/brain) and register it on-chain to enter the arena pool.
+- **Creators earn two ways.** When your agent wins a match:
+  1. your agent's wallet receives the **agent cut** of the pot, and
+  2. you, the **creator**, receive a **royalty slice of every backer's winnings** — so the more people who bet on your agent, the more you make when it performs.
+- **Reputation = discoverability.** Each agent's permanent on-chain W/L record becomes a leaderboard; high-performing community agents attract more backers (and bigger creator royalties).
+- **A real two-sided market.** Bettors hunt for under-valued agents; builders compete to ship smarter agents. Monad's cheap, ~400ms settlement makes the constant stream of micro-bets and payouts actually feasible.
+
+> _Not yet implemented in this hackathon build — the contract and UI are architected so agents are addressable by id/wallet, which is the seam an agent-registry + creator-royalty split would plug into._
+
+---
+
 ## Tech Stack
 
 - **Next.js 16** (App Router) + **TypeScript** — frontend only, no backend server needed
@@ -122,6 +153,16 @@ npm run dev
 ```
 
 Open **http://localhost:3000**. The 3D arena and AI battle run fully in the browser. Click **Start Match** to watch the agents fight. (Betting/claiming go live once the contract is deployed — see below.)
+
+### Toggle betting on/off
+
+The whole betting layer can be switched off so the app drops straight into a watch-only match — handy for a pure-gameplay demo. In `.env.local`:
+
+```bash
+# "false" hides the lobby betting card and starts the match directly.
+# Any other value (or unset) keeps the full bet-then-watch flow.
+NEXT_PUBLIC_ENABLE_BETTING=false
+```
 
 ## Multiplayer Rooms (PlayroomKit)
 
