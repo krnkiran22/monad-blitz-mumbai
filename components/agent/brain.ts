@@ -72,6 +72,53 @@ const SPAWNS = [
   { x: 0, y: 0, z: 8 },
 ];
 
+const AGENT_RADIUS = 0.55;
+
+// XZ footprint of a solid prop the agents must walk around.
+export interface Obstacle {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+function blockedAt(x: number, z: number, obs: Obstacle[]): boolean {
+  for (const o of obs) {
+    if (
+      x > o.minX - AGENT_RADIUS &&
+      x < o.maxX + AGENT_RADIUS &&
+      z > o.minZ - AGENT_RADIUS &&
+      z < o.maxZ + AGENT_RADIUS
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Local steering: if the intended heading would run into a prop, fan out to the
+// sides and take the first clear heading so the agent rounds the obstacle
+// instead of grinding against it.
+function steerAround(
+  x: number,
+  z: number,
+  dirX: number,
+  dirZ: number,
+  obs: Obstacle[]
+): [number, number] {
+  if (obs.length === 0) return [dirX, dirZ];
+  const look = 1.9;
+  if (!blockedAt(x + dirX * look, z + dirZ * look, obs)) return [dirX, dirZ];
+  for (const a of [0.6, -0.6, 1.2, -1.2, 1.8, -1.8, 2.5, -2.5]) {
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const nx = dirX * c - dirZ * s;
+    const nz = dirX * s + dirZ * c;
+    if (!blockedAt(x + nx * look, z + nz * look, obs)) return [nx, nz];
+  }
+  return [dirX, dirZ];
+}
+
 export function createBots(): BotState[] {
   // Per-match randomization so no two matches play the same way.
   const ringDir = Math.random() < 0.5 ? 1 : 2; // direction of the rivalry ring
@@ -241,7 +288,8 @@ export function tickBot(
   enemies: BotState[],
   dt: number,
   now: number,
-  onShoot: (from: BotState, target: BotState) => void
+  onShoot: (from: BotState, target: BotState) => void,
+  obstacles: Obstacle[] = []
 ) {
   integrateJump(bot, dt);
 
@@ -281,13 +329,12 @@ export function tickBot(
   const nz = dz / d;
   const range = fireRange(bot);
 
-  // Always face the target.
-  bot.angle = Math.atan2(dx, dz);
   bot.moving = false;
   bot.crouching = false;
 
   let mvx = 0;
   let mvz = 0;
+  let wantShoot = true; // does this behaviour fire this tick?
 
   switch (bot.intent) {
     case "engage":
@@ -317,9 +364,11 @@ export function tickBot(
       const cx = bot.coverPos.x - bot.pos.x;
       const cz = bot.coverPos.z - bot.pos.z;
       const cd = Math.hypot(cx, cz) || 0.0001;
-      if (cd > 0.7) {
+      if (cd > 0.8) {
+        // Still running to cover — sprint there with the weapon down.
         mvx = cx / cd;
         mvz = cz / cd;
+        wantShoot = false;
       } else {
         // At cover: peek-and-hide rhythm.
         bot.crouching = Math.floor(now / 850) % 2 === 0;
@@ -327,22 +376,29 @@ export function tickBot(
       break;
     }
     case "harass": {
-      // Shoot and fall back: keep facing the target while backpedalling,
-      // sliding sideways so the retreat isn't a straight line.
-      const px = -nz * bot.strafeDir;
-      const pz = nx * bot.strafeDir;
-      if (d < range * 0.85) {
-        mvx = -nx * 0.8 + px * 0.5;
-        mvz = -nz * 0.8 + pz * 0.5;
+      // Peek-and-reposition: trade fire from a spot, then turn and relocate.
+      if (!bot.coverPos) bot.coverPos = nearestCover(bot);
+      const firing = Math.floor(now / 1100) % 2 === 0;
+      if (firing) {
+        const px = -nz * bot.strafeDir;
+        const pz = nx * bot.strafeDir;
+        mvx = px * 0.35;
+        mvz = pz * 0.35;
       } else {
-        mvx = px;
-        mvz = pz;
+        // Break contact and run to cover (weapon down so it faces forward).
+        const cx = bot.coverPos.x - bot.pos.x;
+        const cz = bot.coverPos.z - bot.pos.z;
+        const cd = Math.hypot(cx, cz) || 0.0001;
+        mvx = cx / cd;
+        mvz = cz / cd;
+        wantShoot = false;
       }
       break;
     }
     case "retreat":
       mvx = -nx;
       mvz = -nz;
+      wantShoot = false;
       break;
   }
 
@@ -351,9 +407,14 @@ export function tickBot(
   if (ml > 0.01) {
     mvx /= ml;
     mvz /= ml;
+    // Round obstacles instead of plowing into them.
+    [mvx, mvz] = steerAround(bot.pos.x, bot.pos.z, mvx, mvz, obstacles);
     bot.pos.x += mvx * speed * dt;
     bot.pos.z += mvz * speed * dt;
     bot.moving = true;
+  } else {
+    mvx = 0;
+    mvz = 0;
   }
   bot.pos.x = clamp(bot.pos.x, -ARENA, ARENA);
   bot.pos.z = clamp(bot.pos.z, -ARENA, ARENA);
@@ -367,9 +428,17 @@ export function tickBot(
     bot.lastJumpAt = now;
   }
 
-  // Fire when in range and not hiding behind cover.
+  // Don't fire while breaking away from the enemy — keeps the model facing
+  // where it runs instead of moon-walking backwards.
+  const movingAway = bot.moving && mvx * nx + mvz * nz < -0.2;
   const hidden = bot.intent === "cover" && bot.crouching;
-  bot.shooting = d < range && !hidden && bot.pos.y < 1.2;
+  bot.shooting = wantShoot && d < range && !hidden && !movingAway && bot.pos.y < 1.2;
+
+  // Aim at the enemy when shooting; otherwise turn to face the run direction.
+  if (bot.shooting) bot.angle = Math.atan2(dx, dz);
+  else if (bot.moving) bot.angle = Math.atan2(mvx, mvz);
+  else bot.angle = Math.atan2(dx, dz);
+
   if (bot.shooting && now - bot.lastShootAt > bot.personality.fireRate) {
     bot.lastShootAt = now;
     onShoot(bot, target);

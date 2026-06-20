@@ -338,8 +338,8 @@ function HostSimulation({
     const obstacles = obstaclesRef.current;
     bots.forEach((bot, i) => {
       const enemies = bots.filter((_, j) => j !== i);
-      tickBot(bot, enemies, dt, now, applyShot);
-      // Keep agents out of solid props; re-clamp to the arena afterwards.
+      tickBot(bot, enemies, dt, now, applyShot, obstacles);
+      // Safety net: if steering still let it clip a prop, push it back out.
       if (obstacles.length) resolveAgentCollision(bot.pos, obstacles);
       bot.pos.x = Math.max(-10, Math.min(10, bot.pos.x));
       bot.pos.z = Math.max(-10, Math.min(10, bot.pos.z));
