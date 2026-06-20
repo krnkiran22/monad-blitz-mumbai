@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Billboard, CameraControls } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { CapsuleCollider, RigidBody } from "@react-three/rapier";
+import { isHost } from "playroomkit";
 import { CharacterSoldier } from "../game/CharacterSoldier";
 import { playSfx, SFX } from "./sfx";
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -27,8 +28,9 @@ export function FriendsCharacterController({ state, userPlayer, onFire, onKilled
   const character = useRef<any>(null);
   const rigidbody = useRef<any>(null);
   const controls = useRef<any>(null);
-  const isDeadRef = useRef(false);
   const lastShoot = useRef(0);
+  const wasDead = useRef(false);
+  const prevHp = useRef(100);
 
   const [animation, setAnimation] = useState("Idle");
   const weapon = state.getState("weapon") || state.state?.profile?.weapon || "AK";
@@ -99,9 +101,29 @@ export function FriendsCharacterController({ state, userPlayer, onFire, onKilled
     if (!rigidbody.current) return;
     const t = rigidbody.current.translation();
 
+    // Health/death is host-authoritative and synced; everyone reads it here.
+    const dead = !!state.getState("dead");
+    const hp = state.getState("health") ?? 100;
+
+    // SFX on every client so hits/deaths are audible to all.
+    if (dead && !wasDead.current) playSfx(SFX.dead, 0.5);
+    else if (hp < prevHp.current) playSfx(SFX.hurt, 0.35);
+
+    // On revive, the host writes a fresh spawn position; the local player
+    // teleports its physics body there (remotes mirror via "pos" below).
+    if (userPlayer && !dead && wasDead.current) {
+      const p = state.getState("pos");
+      if (p) {
+        rigidbody.current.setTranslation(p, true);
+        rigidbody.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      }
+      setAnimation("Idle");
+    }
+    wasDead.current = dead;
+    prevHp.current = hp;
+
     // ── CAMERA FOLLOW — identical to stellar_strike (Normal mode) ──
     if (controls.current && userPlayer) {
-      const dead = state.state?.dead;
       const cameraDistanceY = window.innerWidth < 1024 ? 16 : 20;
       const cameraDistanceZ = window.innerWidth < 1024 ? 12 : 16;
       controls.current.setLookAt(
@@ -115,7 +137,7 @@ export function FriendsCharacterController({ state, userPlayer, onFire, onKilled
       );
     }
 
-    if (state.state?.dead) {
+    if (dead) {
       if (animation !== "Death") setAnimation("Death");
       return;
     }
@@ -194,30 +216,29 @@ export function FriendsCharacterController({ state, userPlayer, onFire, onKilled
         type={userPlayer ? "dynamic" : "kinematicPosition"}
         userData={{ type: "player", id: state.id }}
         onIntersectionEnter={({ other }: any) => {
-          if (!userPlayer) return;
+          // The host is the single source of truth for damage: it can write any
+          // player's state, so hits register reliably regardless of which client
+          // the shooter is on (no cross-client miss from position lag).
+          if (!isHost()) return;
           const u = other.rigidBody?.userData;
           if (u?.type !== "bullet" || u?.player === state.id) return;
-          if (isDeadRef.current || state.state?.dead) return;
+          if (state.getState("dead")) return;
 
-          const newHealth = (state.state?.health ?? 100) - (u.damage ?? 10);
+          const newHealth = (state.getState("health") ?? 100) - (u.damage ?? 10);
           if (newHealth <= 0) {
-            isDeadRef.current = true;
-            state.setState("dead", true);
             state.setState("health", 0);
-            playSfx(SFX.dead, 0.5);
-            rigidbody.current?.setEnabled(false);
+            state.setState("dead", true);
+            onKilled(state.id, u.player);
+            // Revive after 2s with a fresh spawn point (broadcast to everyone).
             setTimeout(() => {
-              spawnRandomly();
-              rigidbody.current?.setEnabled(true);
+              const a = Math.random() * Math.PI * 2;
+              const r = 4 + Math.random() * 6;
+              state.setState("pos", { x: Math.cos(a) * r, y: 2, z: Math.sin(a) * r });
               state.setState("health", 100);
               state.setState("dead", false);
-              isDeadRef.current = false;
-              setAnimation("Idle");
             }, 2000);
-            onKilled(state.id, u.player);
           } else {
             state.setState("health", newHealth);
-            playSfx(SFX.hurt, 0.4);
           }
         }}
       >

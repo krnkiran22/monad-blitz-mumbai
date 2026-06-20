@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Environment } from "@react-three/drei";
-import { myPlayer, onPlayerJoin } from "playroomkit";
+import { useFrame } from "@react-three/fiber";
+ import { myPlayer, onPlayerJoin } from "playroomkit";
 import { FriendsMap } from "./FriendsMap";
 import { FriendsCharacterController } from "./FriendsCharacterController";
 import { FriendsBullet, BulletData } from "./FriendsBullet";
@@ -17,9 +18,22 @@ interface HitFx {
   position: { x: number; y: number; z: number };
 }
 
-export function FriendsExperience({ mapFile }: { mapFile: string }) {
+// Drop bullets that never hit anything so they don't pile up in player state.
+const BULLET_LIFETIME = 2000; // ms
+
+export function FriendsExperience({ mapFile, onReady }: { mapFile: string; onReady?: () => void }) {
   const [players, setPlayers] = useState<any[]>([]);
   const [hits, setHits] = useState<HitFx[]>([]);
+  const [bullets, setBullets] = useState<BulletData[]>([]);
+  const bulletSig = useRef("");
+
+  // This component only commits after Suspense resolves (map GLTF + HDR
+  // environment loaded), so this is a reliable "scene is ready" signal that
+  // lets the page lift its dark loading cover and avoid the light-sky flash.
+  useEffect(() => {
+    onReady?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const unsub = onPlayerJoin((state: any) => {
@@ -65,7 +79,28 @@ export function FriendsExperience({ mapFile }: { mapFile: string }) {
     // Scoring is intentionally light for the open friends mode.
   };
 
-  const bullets: BulletData[] = players.flatMap((p) => p.getState("bullets") || []);
+  // Bullets live in each player's networked state, which does NOT re-render this
+  // component on change. Poll it every frame, expire stale shots, and push to
+  // React state only when the live set actually changes.
+  useFrame(() => {
+    const now = Date.now();
+    let all: BulletData[] = [];
+    for (const p of players) {
+      const list: BulletData[] = p.getState("bullets") || [];
+      if (list.length === 0) continue;
+      const alive = list.filter((b) => {
+        const ts = Number(b.id.split("-").pop());
+        return !ts || now - ts < BULLET_LIFETIME;
+      });
+      if (alive.length !== list.length) p.setState("bullets", alive);
+      all = all.concat(alive);
+    }
+    const sig = all.map((b) => b.id).join(",");
+    if (sig !== bulletSig.current) {
+      bulletSig.current = sig;
+      setBullets(all);
+    }
+  });
 
   return (
     <>

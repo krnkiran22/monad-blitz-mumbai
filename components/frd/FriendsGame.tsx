@@ -8,7 +8,7 @@ import { FriendsExperience } from "./FriendsExperience";
 
 // Full-screen playable canvas. The follow camera lives in the character
 // controller (CameraControls), so the initial Canvas camera is just a seed.
-export function FriendsGame({ mapFile }: { mapFile: string }) {
+export function FriendsGame({ mapFile, onReady }: { mapFile: string; onReady?: () => void }) {
   return (
     <Canvas
       shadows
@@ -18,7 +18,7 @@ export function FriendsGame({ mapFile }: { mapFile: string }) {
     >
       <Suspense fallback={null}>
         <Physics>
-          <FriendsExperience mapFile={mapFile} />
+          <FriendsExperience mapFile={mapFile} onReady={onReady} />
         </Physics>
       </Suspense>
 
