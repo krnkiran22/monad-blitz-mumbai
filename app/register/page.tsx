@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   useAgentRegistry,
   OnchainAgent,
+  DEFAULT_AGENT_IMAGE,
 } from "../../components/chain/useAgentRegistry";
 import {
   IDENTITY_REGISTRY_ADDRESS,
@@ -46,7 +47,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0717] text-white">
+    <div className="h-screen overflow-y-auto bg-[#0b0717] text-white">
       {/* glow backdrop */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-40 left-1/3 h-[520px] w-[520px] rounded-full bg-[#836ef9]/20 blur-[140px]" />
@@ -96,8 +97,21 @@ export default function RegisterPage() {
         <div className="mt-10 grid gap-8 lg:grid-cols-[400px_1fr]">
           {/* ── Registration form ── */}
           <div className="rounded-3xl border border-white/10 bg-white/4 p-6 backdrop-blur">
-            <h2 className="text-lg font-black tracking-wide">Register an agent</h2>
-            <p className="mt-1 text-xs text-white/50">Mints to your connected wallet on Monad Testnet.</p>
+            <div className="flex items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={DEFAULT_AGENT_IMAGE}
+                alt="Default agent"
+                className="h-14 w-14 rounded-xl object-cover ring-2"
+                style={{ boxShadow: `0 0 0 2px ${color}` }}
+              />
+              <div>
+                <h2 className="text-lg font-black tracking-wide">Register an agent</h2>
+                <p className="mt-0.5 text-xs text-white/50">
+                  Mints to your wallet with the default soldier face.
+                </p>
+              </div>
+            </div>
 
             <label className="mt-5 block text-xs font-bold uppercase tracking-wide text-white/50">
               Agent name
@@ -228,12 +242,13 @@ function AgentCard({ agent, mine }: { agent: OnchainAgent; mine: boolean }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/4 p-4">
       <div className="flex items-center gap-3">
-        <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg font-black"
-          style={{ backgroundColor: `${agent.color}33`, color: agent.color }}
-        >
-          {agent.name.charAt(0).toUpperCase()}
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={agent.image || DEFAULT_AGENT_IMAGE}
+          alt={agent.name}
+          className="h-11 w-11 shrink-0 rounded-xl object-cover"
+          style={{ boxShadow: `0 0 0 2px ${agent.color}` }}
+        />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="truncate font-bold">{agent.name}</p>

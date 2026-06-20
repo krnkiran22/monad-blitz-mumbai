@@ -17,6 +17,7 @@ export interface AgentMeta {
   tagline?: string;
   color?: string;
   weapon?: string;
+  image?: string;
 }
 
 export interface OnchainAgent extends AgentMeta {
@@ -27,6 +28,9 @@ export interface OnchainAgent extends AgentMeta {
   kills: number;
   uri: string;
 }
+
+// Default NFT artwork — the in-game soldier face, served from /public.
+export const DEFAULT_AGENT_IMAGE = "/agents/default.png";
 
 // Self-contained metadata — no IPFS needed for the demo. The agent's profile
 // lives in the ERC-721 tokenURI as a base64 data URI, so it's fully on-chain.
@@ -105,6 +109,7 @@ export function useAgentRegistry() {
             tagline: meta.tagline || "",
             color: meta.color || "#836ef9",
             weapon: meta.weapon || "AK",
+            image: meta.image || DEFAULT_AGENT_IMAGE,
             matches: Number(played),
             wins: Number(wins),
             kills: Number(kills),
@@ -181,6 +186,14 @@ export function useAgentRegistry() {
     if (!addr) addr = (await connectWallet()) || "";
     if (!addr) throw new Error("Connect a wallet first");
 
+    // Default the NFT image to the in-game soldier face (absolute URL so it
+    // also resolves on explorers / marketplaces, not just inside the app).
+    const image =
+      meta.image ||
+      (typeof window !== "undefined"
+        ? `${window.location.origin}${DEFAULT_AGENT_IMAGE}`
+        : DEFAULT_AGENT_IMAGE);
+
     setLoading(true);
     try {
       const wc = getWalletClient();
@@ -189,7 +202,7 @@ export function useAgentRegistry() {
         address: IDENTITY_REGISTRY_ADDRESS,
         abi: IDENTITY_REGISTRY_ABI,
         functionName: "register",
-        args: [toDataUri(meta)],
+        args: [toDataUri({ ...meta, image })],
         account: addr as `0x${string}`,
       });
       const receipt = await getPublicClient().waitForTransactionReceipt({ hash });
