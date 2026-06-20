@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useRef } from "react";
+import { Suspense, useRef, useState, useEffect } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Environment, Float } from "@react-three/drei";
 import * as THREE from "three";
@@ -8,16 +8,55 @@ import { CharacterSoldier } from "./CharacterSoldier";
 import { AGENT_PERSONALITIES } from "../agent/brain";
 
 // Hero shot like stellar_strike: the middle agent stands tall and alone while
-// the two flanking agents open fire — all facing the camera.
+// the two flanking agents fire short bursts — all facing the camera.
 const HEROES: {
   pos: [number, number, number];
   rot: [number, number, number];
-  anim: string;
+  shoot: boolean;
+  offset: number; // ms before the first burst, so flankers fire out of sync
 }[] = [
-  { pos: [3.0, 0, 1.4], rot: [0, 0.16, 0], anim: "Idle_Shoot" },
-  { pos: [5.2, 0, -0.4], rot: [0, 0, 0], anim: "Idle" },
-  { pos: [7.4, 0, 1.4], rot: [0, -0.16, 0], anim: "Idle_Shoot" },
+  { pos: [3.0, 0, 1.4], rot: [0, 0.16, 0], shoot: true, offset: 200 },
+  { pos: [5.2, 0, -0.4], rot: [0, 0, 0], shoot: false, offset: 0 },
+  { pos: [7.4, 0, 1.4], rot: [0, -0.16, 0], shoot: true, offset: 1300 },
 ];
+
+const BURST_MS = 1000; // a short volley (~two shots)
+const GAP_MS = 1600; // pause between bursts
+
+// One menu agent. Shooters cycle between a short burst and a pause instead of
+// firing continuously.
+function Hero({ index, shoot, offset }: { index: number; shoot: boolean; offset: number }) {
+  const [anim, setAnim] = useState("Idle");
+
+  useEffect(() => {
+    if (!shoot) {
+      setAnim("Idle");
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout>;
+    let firing = false;
+    const loop = () => {
+      firing = !firing;
+      setAnim(firing ? "Idle_Shoot" : "Idle");
+      timer = setTimeout(loop, firing ? BURST_MS : GAP_MS);
+    };
+    timer = setTimeout(loop, offset);
+    return () => clearTimeout(timer);
+  }, [shoot, offset]);
+
+  const p = AGENT_PERSONALITIES[index];
+  return (
+    <>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+        <ringGeometry args={[0.5, 0.7, 32]} />
+        <meshBasicMaterial color={p.color} transparent opacity={0.6} />
+      </mesh>
+      <Float speed={1.2} rotationIntensity={0} floatIntensity={0.15}>
+        <CharacterSoldier color={p.color} animation={anim} weapon={p.weapon} scale={1.15} />
+      </Float>
+    </>
+  );
+}
 
 // Fixed front-on camera (no orbit) centered on the trio so the agents are the
 // centerpiece of the hero card. Title/content sit on top via z-index.
@@ -83,18 +122,7 @@ export function MenuScene() {
       <Suspense fallback={null}>
         {HEROES.map((h, i) => (
           <group key={i} position={h.pos} rotation={h.rot}>
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-              <ringGeometry args={[0.5, 0.7, 32]} />
-              <meshBasicMaterial color={AGENT_PERSONALITIES[i].color} transparent opacity={0.6} />
-            </mesh>
-            <Float speed={1.2} rotationIntensity={0} floatIntensity={0.15}>
-              <CharacterSoldier
-                color={AGENT_PERSONALITIES[i].color}
-                animation={h.anim}
-                weapon={AGENT_PERSONALITIES[i].weapon}
-                scale={1.15}
-              />
-            </Float>
+            <Hero index={i} shoot={h.shoot} offset={h.offset} />
           </group>
         ))}
       </Suspense>
