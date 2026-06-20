@@ -19,12 +19,12 @@ const HEROES: {
   { pos: [7.4, 0, 1.4], rot: [0, -0.16, 0], anim: "Idle_Shoot" },
 ];
 
-// Fixed front-on camera (no orbit). It looks to the left of the trio so the
-// agents sit in the right half of the screen and the hero text stays clear.
+// Fixed front-on camera (no orbit) centered on the trio so the agents are the
+// centerpiece of the hero card. Title/content sit on top via z-index.
 function StaticCam() {
   useFrame(({ camera }) => {
-    camera.position.set(1.5, 3.3, 11);
-    camera.lookAt(2.6, 1.4, 0);
+    camera.position.set(5.2, 3.1, 11);
+    camera.lookAt(5.2, 1.3, 0);
   });
   return null;
 }
