@@ -28,6 +28,7 @@ function Game() {
     monBalance,
     connectWallet,
     placeBet,
+    betAll,
     claimWinnings,
     openBetting,
     lockBetting,
@@ -74,6 +75,7 @@ function Game() {
         onConnect={connectWallet}
         onOpenBetting={openBetting}
         onPlaceBet={placeBet}
+        onBetAll={betAll}
         onLockBetting={lockBetting}
         onEnter={(selectedMap) => {
           setMapFile(selectedMap);

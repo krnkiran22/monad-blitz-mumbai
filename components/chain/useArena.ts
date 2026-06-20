@@ -247,6 +247,18 @@ export function useArena(address?: string) {
     }
   };
 
+  // Stake the same amount on every agent (the intended demo flow: 0.5 / 0.5 /
+  // 0.5). Runs the three bets sequentially so the wallet nonces don't collide.
+  const betAll = async (amountEth: string) => {
+    if (!walletAddress) {
+      await connectWallet();
+      return;
+    }
+    for (let i = 0; i < 3; i++) {
+      await placeBet(i, amountEth);
+    }
+  };
+
   // ── Owner-only match orchestration (host runs the on-chain round) ──────────
   const ownerTx = async (functionName: "startMatch" | "closeBetting") => {
     if (!walletAddress) { await connectWallet(); return; }
@@ -325,6 +337,7 @@ export function useArena(address?: string) {
     monBalance,
     connectWallet,
     placeBet,
+    betAll,
     claimWinnings,
     openBetting,
     lockBetting,

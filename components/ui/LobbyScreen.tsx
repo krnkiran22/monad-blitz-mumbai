@@ -1,11 +1,17 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { MonadMark, MonadCoin } from "./MonadMark";
 import { AGENT_PERSONALITIES } from "../agent/brain";
 import { useMultiplayer } from "../game/multiplayer";
 import type { ArenaState } from "../chain/useArena";
+
+const MapPreview = dynamic(
+  () => import("../game/MapPreview").then((m) => ({ default: m.MapPreview })),
+  { ssr: false }
+);
 
 const QUICK_BETS = ["0.1", "0.5", "1"];
 const AGENT_NAMES = AGENT_PERSONALITIES.map((a) => a.name);
@@ -30,6 +36,7 @@ interface Props {
   onConnect: () => void;
   onOpenBetting: () => Promise<void> | void;
   onPlaceBet: (agentId: number, amount: string) => void;
+  onBetAll: (amount: string) => Promise<void> | void;
   onLockBetting: () => Promise<void> | void;
 }
 
@@ -45,6 +52,7 @@ export function LobbyScreen({
   onConnect,
   onOpenBetting,
   onPlaceBet,
+  onBetAll,
   onLockBetting,
 }: Props) {
   const { status, roomCode, isHost, playerCount, error, connect } = useMultiplayer();
@@ -235,6 +243,17 @@ export function LobbyScreen({
                   </span>
                 </div>
 
+                {walletAddress && (
+                  <div className="flex items-center justify-between text-[11px] mb-3 -mt-1">
+                    <span className="text-gray-400">
+                      balance <span className="text-white font-bold font-mono">{monBalance}</span> MON
+                    </span>
+                    <span className="text-gray-400">
+                      my stake <span className="text-white font-bold">{myStake.toFixed(2)}</span> MON
+                    </span>
+                  </div>
+                )}
+
                 {!walletAddress ? (
                   <button
                     onClick={onConnect}
@@ -279,6 +298,25 @@ export function LobbyScreen({
                         </button>
                       ))}
                     </div>
+
+                    {/* Primary action: stake on ALL three agents at once. */}
+                    <button
+                      onClick={() => onBetAll(betAmount)}
+                      disabled={loading || !betAmount || parseFloat(betAmount) <= 0}
+                      className="w-full py-2.5 rounded-xl bg-linear-to-r from-[#836ef9] to-[#6246ea] hover:opacity-90 disabled:opacity-50 font-black text-white text-sm tracking-wide transition-opacity"
+                    >
+                      {loading ? "Confirming bets…" : `Bet ${betAmount} on all 3 agents`}
+                    </button>
+                    <p className="text-[10px] text-gray-500 text-center -mt-1">
+                      Sends 3 transactions — {betAmount || "0"} MON on each. Confirm each in your wallet.
+                    </p>
+
+                    <div className="flex items-center gap-2 py-0.5">
+                      <span className="flex-1 h-px bg-white/10" />
+                      <span className="text-[9px] text-gray-500 font-bold tracking-widest">OR ONE AT A TIME</span>
+                      <span className="flex-1 h-px bg-white/10" />
+                    </div>
+
                     {AGENT_NAMES.map((name, i) => (
                       <div key={i} className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
@@ -298,9 +336,6 @@ export function LobbyScreen({
                         </button>
                       </div>
                     ))}
-                    <p className="text-[11px] text-gray-400 text-center pt-1">
-                      My stake: <span className="text-white font-bold">{myStake.toFixed(2)} MON</span> · winners split the pot
-                    </p>
                   </div>
                 )}
               </div>
@@ -334,25 +369,29 @@ export function LobbyScreen({
                 {isHost && <span className="text-xs text-[#a78bfa] font-mono">0{mapIndex + 1} / 0{MAP_LIST.length}</span>}
               </div>
 
-              <div className="relative flex-1 rounded-xl overflow-hidden bg-gradient-to-br from-[#1a1033] to-[#0a0613] border border-[#836ef9]/20 min-h-[240px] flex items-center justify-center">
-                <div className="text-center">
-                  <div className="text-6xl mb-3 opacity-30">🗺️</div>
-                  <h2 className="text-3xl font-black text-white italic tracking-tight">{map.name}</h2>
-                  <span className="inline-block mt-2 text-[10px] font-black tracking-widest text-[#a78bfa] px-3 py-1 rounded-full border border-[#836ef9]/30">
-                    {map.tag}
-                  </span>
+              <div className="relative flex-1 rounded-xl overflow-hidden bg-gradient-to-br from-[#1a1033] to-[#0a0613] border border-[#836ef9]/20 min-h-[300px]">
+                {/* Live 3D preview of the actual selected map. */}
+                <div className="absolute inset-0">
+                  <MapPreview mapFile={map.file} />
                 </div>
+
+                {/* Small name label so the map itself stays the focus. */}
+                <div className="absolute bottom-2.5 left-2.5 z-10 flex items-center gap-2 glass rounded-lg px-3 py-1.5 pointer-events-none">
+                  <span className="text-sm font-black text-white tracking-tight">{map.name}</span>
+                  <span className="text-[9px] font-black tracking-widest text-[#a78bfa]">{map.tag}</span>
+                </div>
+
                 {isHost && (
                   <>
                     <button
                       onClick={() => setMapIndex((p) => (p === 0 ? MAP_LIST.length - 1 : p - 1))}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full glass flex items-center justify-center text-white hover:bg-[#836ef9]/30 transition-all"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full glass flex items-center justify-center text-white hover:bg-[#836ef9]/30 transition-all"
                     >
                       ‹
                     </button>
                     <button
                       onClick={() => setMapIndex((p) => (p === MAP_LIST.length - 1 ? 0 : p + 1))}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full glass flex items-center justify-center text-white hover:bg-[#836ef9]/30 transition-all"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full glass flex items-center justify-center text-white hover:bg-[#836ef9]/30 transition-all"
                     >
                       ›
                     </button>
