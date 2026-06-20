@@ -1,4 +1,4 @@
-export type Intent = "engage" | "strafe" | "flank" | "cover" | "retreat" | "idle";
+export type Intent = "engage" | "strafe" | "flank" | "cover" | "retreat" | "harass" | "idle";
 
 export interface AgentPersonality {
   name: string;
@@ -32,6 +32,7 @@ export interface BotState {
   shooting: boolean;
   crouching: boolean;
   target: number; // index of the enemy this bot is engaging
+  rival: number; // preferred opponent for this match (varies each match)
   strafeDir: 1 | -1;
   coverPos: { x: number; z: number } | null;
   anim: string; // animation name, computed on host, mirrored to clients
@@ -72,29 +73,47 @@ const SPAWNS = [
 ];
 
 export function createBots(): BotState[] {
-  return AGENT_PERSONALITIES.map((p, i) => ({
-    id: i,
-    personality: p,
-    health: 100,
-    intent: "engage",
-    lastThinkAt: 0,
-    lastShootAt: 0,
-    lastJumpAt: 0,
-    pos: { ...SPAWNS[i] },
-    vy: 0,
-    angle: 0,
-    dead: false,
-    moving: false,
-    shooting: false,
-    crouching: false,
-    target: (i + 1) % AGENT_PERSONALITIES.length,
-    strafeDir: i % 2 === 0 ? 1 : -1,
-    coverPos: null,
-    anim: "Idle",
-    kills: 0,
-    deaths: 0,
-    respawnAt: 0,
-  }));
+  // Per-match randomization so no two matches play the same way.
+  const ringDir = Math.random() < 0.5 ? 1 : 2; // direction of the rivalry ring
+  const spawnOrder = shuffle([0, 1, 2]);
+  const openers: Intent[] = ["engage", "harass", "flank"];
+
+  return AGENT_PERSONALITIES.map((p, i) => {
+    const rival = (i + ringDir) % AGENT_PERSONALITIES.length;
+    return {
+      id: i,
+      personality: p,
+      health: 100,
+      intent: openers[Math.floor(Math.random() * openers.length)],
+      lastThinkAt: 0,
+      lastShootAt: 0,
+      lastJumpAt: 0,
+      pos: { ...SPAWNS[spawnOrder[i]] },
+      vy: 0,
+      angle: 0,
+      dead: false,
+      moving: false,
+      shooting: false,
+      crouching: false,
+      target: rival,
+      rival,
+      strafeDir: Math.random() < 0.5 ? 1 : -1,
+      coverPos: null,
+      anim: "Idle",
+      kills: 0,
+      deaths: 0,
+      respawnAt: 0,
+    };
+  });
+}
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 /** Bring a dead bot back to life at its spawn point (kills/deaths preserved). */
@@ -107,6 +126,7 @@ export function respawnBot(bot: BotState) {
   bot.shooting = false;
   bot.crouching = false;
   bot.intent = "engage";
+  bot.target = bot.rival;
   bot.coverPos = null;
   bot.respawnAt = 0;
   bot.lastThinkAt = 0;
@@ -142,25 +162,58 @@ function nearestCover(bot: BotState) {
   );
 }
 
-export function thinkBot(bot: BotState, alive: BotState[]): Intent {
-  const target = nearestEnemy(bot, alive);
-  if (!target) return "idle";
+function byId(bots: BotState[], id: number) {
+  return bots.find((b) => b.id === id) ?? null;
+}
+
+/** Pick who to fight: stick with this match's rival, else the nearest foe.
+ *  Keeping rivalries alive spreads the action so all three keep fighting
+ *  instead of everyone ganging the same target. */
+function pickTarget(bot: BotState, alive: BotState[]): BotState {
+  const rival = byId(alive, bot.rival);
+  if (rival && Math.random() < 0.7) return rival;
+  return nearestEnemy(bot, alive) ?? rival ?? alive[0];
+}
+
+/** Weighted random pick from [option, weight] pairs. */
+function weighted<T>(opts: [T, number][]): T {
+  const total = opts.reduce((s, [, w]) => s + w, 0);
+  let r = Math.random() * total;
+  for (const [opt, w] of opts) {
+    r -= w;
+    if (r <= 0) return opt;
+  }
+  return opts[0][0];
+}
+
+export function thinkBot(bot: BotState, target: BotState): Intent {
   const d = dist(bot.pos, target.pos);
   const range = fireRange(bot);
+  const agg = bot.personality.aggression;
 
-  if (bot.health < bot.personality.retreatThreshold) return "retreat";
-
-  const r = Math.random();
-  if (d < 6) {
-    // Close quarters: dance around or duck behind cover.
-    return r < bot.personality.aggression ? "strafe" : "cover";
+  if (bot.health < bot.personality.retreatThreshold) {
+    return weighted<Intent>([["retreat", 0.6], ["cover", 0.4]]);
   }
+
   if (d > range) {
-    // Out of range: close the gap, sometimes from the side.
-    return r < 0.7 ? "engage" : "flank";
+    // Out of range: close the distance, often from an angle.
+    return weighted<Intent>([["engage", 0.55 + agg * 0.2], ["flank", 0.45]]);
   }
-  // Mid range: mix of pressure and cover.
-  return r < 0.45 ? "strafe" : r < 0.75 ? "engage" : "cover";
+  if (d < 6) {
+    // Close quarters: dance, fire-and-fall-back, or duck behind cover.
+    return weighted<Intent>([
+      ["strafe", 0.35 + agg * 0.2],
+      ["harass", 0.35],
+      ["cover", 0.3 - agg * 0.15],
+    ]);
+  }
+  // Mid range: pressure, hit-and-run, reposition.
+  return weighted<Intent>([
+    ["strafe", 0.3],
+    ["harass", 0.3],
+    ["engage", 0.2 + agg * 0.2],
+    ["cover", 0.2],
+  ]);
 }
 
 function integrateJump(bot: BotState, dt: number) {
@@ -207,16 +260,20 @@ export function tickBot(
     return;
   }
 
-  // Re-evaluate strategy roughly every 1.2s.
-  if (now - bot.lastThinkAt > 1200) {
-    bot.intent = thinkBot(bot, alive);
+  // Re-pick target + strategy every ~1.3s (or immediately if the target died).
+  let target = byId(alive, bot.target);
+  if (!target || now - bot.lastThinkAt > 1300) {
+    target = pickTarget(bot, alive);
+    bot.target = target.id;
+    bot.intent = thinkBot(bot, target);
     bot.lastThinkAt = now;
     if (bot.intent === "cover") bot.coverPos = nearestCover(bot);
-    if (bot.intent === "strafe") bot.strafeDir = Math.random() < 0.5 ? 1 : -1;
+    if (bot.intent === "strafe" || bot.intent === "flank") {
+      bot.strafeDir = Math.random() < 0.5 ? 1 : -1;
+    }
   }
+  if (!target) return;
 
-  const target = nearestEnemy(bot, alive)!;
-  bot.target = target.id;
   const dx = target.pos.x - bot.pos.x;
   const dz = target.pos.z - bot.pos.z;
   const d = Math.hypot(dx, dz) || 0.0001;
@@ -269,6 +326,20 @@ export function tickBot(
       }
       break;
     }
+    case "harass": {
+      // Shoot and fall back: keep facing the target while backpedalling,
+      // sliding sideways so the retreat isn't a straight line.
+      const px = -nz * bot.strafeDir;
+      const pz = nx * bot.strafeDir;
+      if (d < range * 0.85) {
+        mvx = -nx * 0.8 + px * 0.5;
+        mvz = -nz * 0.8 + pz * 0.5;
+      } else {
+        mvx = px;
+        mvz = pz;
+      }
+      break;
+    }
     case "retreat":
       mvx = -nx;
       mvz = -nz;
@@ -287,10 +358,12 @@ export function tickBot(
   bot.pos.x = clamp(bot.pos.x, -ARENA, ARENA);
   bot.pos.z = clamp(bot.pos.z, -ARENA, ARENA);
 
-  // Occasional dodge-hop while in motion or when getting close.
-  const jumpCooldown = 1600 + Math.random() * 2600;
-  if (bot.pos.y <= 0.001 && now - bot.lastJumpAt > jumpCooldown && (bot.moving || d < 5)) {
-    bot.vy = 6.4;
+  // Jump only when it matters: a dodge-hop while actually being shot at.
+  const underFire = alive.some(
+    (e) => e.target === bot.id && e.shooting && dist(e.pos, bot.pos) < fireRange(e)
+  );
+  if (bot.pos.y <= 0.001 && now - bot.lastJumpAt > 4000 && underFire && Math.random() < 0.05) {
+    bot.vy = 6.6;
     bot.lastJumpAt = now;
   }
 
