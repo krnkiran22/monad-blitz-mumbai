@@ -10,7 +10,14 @@ Built for **Monad Blitz Mumbai V3 — The Agent Economy**.
 1. **Bet to earn** — stake MON on the agent you think will win; winners split the pot.
 2. **Build to earn** — deploy your _own_ AI agent into the arena. When people bet on your agent and it wins, **you** earn a cut of the prize pot **plus a slice of every backer's winnings**. The arena becomes an open marketplace of community-built agents, not a fixed roster of three.
 
-> _Build-to-earn is the product vision and is described as roadmap below — the on-chain betting, payouts, and reputation for the house agents are **live today**._
+> _On-chain betting, payouts, and reputation for the house agents are **live today**. Anyone can already **mint their own agent passport** (ERC-8004) at `/register` — the creator-royalty split is the next step on the roadmap below._
+
+### What's live in this build
+
+- **3D AI deathmatch** — 3 autonomous agents, 60s respawn match, most kills wins, full spectator/POV camera + fullscreen.
+- **On-chain betting & payouts** — stake MON pre-match, winners split the pot, settled on `Arena.sol`.
+- **ERC-8004 agent passports** — mint an on-chain agent identity (ERC-721) at **`/register`** and view the live roster + reputation.
+- **Friends mode (`/frd`)** — no wallet, no betting: create a room, share the link/code, and battle friends with real bullets in the arena.
 
 ### Live on Monad Testnet
 
@@ -91,16 +98,16 @@ Three distinct personalities make matches unpredictable:
 
 ## Roadmap — Build-to-Earn: an Open Agent Arena
 
-Today BGMI ships with three house agents. The bigger idea — and where the real agent economy lives — is letting **anyone deploy their own agent to battle and earn**:
+BGMI ships with three house agents **and** a live ERC-8004 registry where anyone can already mint their own agent passport (`/register`). The bigger idea — where the real agent economy lives — is closing the loop so registered agents battle and **earn**:
 
-- **Bring your own agent.** Submit an agent (its wallet + a strategy/brain) and register it on-chain to enter the arena pool.
+- **Bring your own agent.** Mint an agent passport on-chain today (ERC-8004 identity + reputation); next, attach its wallet + strategy/brain to enter the arena pool.
 - **Creators earn two ways.** When your agent wins a match:
   1. your agent's wallet receives the **agent cut** of the pot, and
   2. you, the **creator**, receive a **royalty slice of every backer's winnings** — so the more people who bet on your agent, the more you make when it performs.
 - **Reputation = discoverability.** Each agent's permanent on-chain W/L record becomes a leaderboard; high-performing community agents attract more backers (and bigger creator royalties).
 - **A real two-sided market.** Bettors hunt for under-valued agents; builders compete to ship smarter agents. Monad's cheap, ~400ms settlement makes the constant stream of micro-bets and payouts actually feasible.
 
-> _Not yet implemented in this hackathon build — the contract and UI are architected so agents are addressable by id/wallet, which is the seam an agent-registry + creator-royalty split would plug into._
+> _The ERC-8004 identity + reputation registries and the `/register` minting UI are **live on Monad Testnet today**. The remaining piece — routing creator royalties from match payouts — plugs into the existing id/wallet seam._
 
 ---
 
@@ -110,8 +117,10 @@ Today BGMI ships with three house agents. The bigger idea — and where the real
 - **React Three Fiber** + **drei** — the 3D arena
 - **PlayroomKit** — multiplayer/state primitives (host-authoritative agents)
 - **viem** — Monad Testnet contract calls (read + write)
+- **@react-three/rapier** — physics for friends mode (`/frd`)
+- **@react-three/postprocessing** — bloom for glowing bullet tracers
 - **Tailwind CSS v4** — UI
-- **Solidity ^0.8.20** — `Arena.sol` smart contract
+- **Solidity ^0.8.20** — `Arena.sol` (betting) + `AgentRegistry.sol` (ERC-8004 identity + reputation)
 
 ## Project Structure
 
@@ -120,8 +129,11 @@ monad_mumbai/
 ├── app/
 │   ├── layout.tsx              # root layout + metadata
 │   ├── page.tsx                # full app: arena + betting + dashboard
+│   ├── register/page.tsx       # ERC-8004: mint agent passport + live roster
+│   ├── frd/page.tsx            # friends mode: rooms, no wallet/betting
 │   └── globals.css
 ├── components/
+│   ├── frd/                    # friends mode: physics arena, controller, bullets
 │   ├── game/
 │   │   ├── Arena.tsx           # 3D scene; host simulates + broadcasts, clients mirror
 │   │   ├── CharacterSoldier.tsx# animated GLTF soldier (from reference assets)
@@ -130,8 +142,9 @@ monad_mumbai/
 │   ├── agent/
 │   │   └── brain.ts            # personalities, bot AI, network snapshot helpers
 │   ├── chain/
-│   │   ├── config.ts           # Monad chain + contract address + ABI
+│   │   ├── config.ts           # Monad chain + contract addresses + ABIs
 │   │   ├── useArena.ts         # React hook: read state, bet, claim
+│   │   ├── useAgentRegistry.ts # React hook: ERC-8004 mint + load roster
 │   │   └── ethereum.d.ts       # window.ethereum typing
 │   └── ui/
 │       ├── HomeScreen.tsx      # PUBG-style landing
@@ -140,8 +153,9 @@ monad_mumbai/
 │       ├── BettingPanel.tsx    # pick agent, live odds, stake MON
 │       └── Dashboard.tsx       # status, W/L records, claim, start match
 ├── contracts/
-│   └── Arena.sol               # betting + payout + reputation contract
-├── .env.example                # NEXT_PUBLIC_ARENA_ADDRESS
+│   ├── Arena.sol               # betting + payout + reputation contract
+│   └── AgentRegistry.sol       # ERC-8004 identity (ERC-721) + reputation registry
+├── .env.example                # contract addresses + Playroom game id
 └── README.md
 ```
 
