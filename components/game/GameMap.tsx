@@ -3,6 +3,7 @@
 import { useGLTF } from "@react-three/drei";
 import { useEffect, useMemo } from "react";
 import { Box3, Mesh, Vector3 } from "three";
+import { SkeletonUtils } from "three-stdlib";
 
 export const MAPS: Record<string, string> = {
   "Free Arena": "/models/map.glb",
@@ -15,7 +16,12 @@ export const MAPS: Record<string, string> = {
 const TARGET_SIZE = 34; // fit the map's largest horizontal dimension to this many world units
 
 export function GameMap({ mapFile }: { mapFile: string }) {
-  const { scene } = useGLTF(mapFile);
+  const { scene: cached } = useGLTF(mapFile);
+
+  // Clone per-instance: the cached scene is shared, and a three.js object can
+  // only live in one scene graph at a time. Without this, mounting a second
+  // Canvas (menu -> arena) steals the map out of the first and blanks it.
+  const scene = useMemo(() => SkeletonUtils.clone(cached), [cached]);
 
   const { scale, position } = useMemo(() => {
     const box = new Box3().setFromObject(scene);
