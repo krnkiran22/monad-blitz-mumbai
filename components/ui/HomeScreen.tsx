@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { MonadMark, MonadCoin } from "./MonadMark";
 
@@ -36,25 +37,33 @@ export function HomeScreen({ walletAddress, monBalance, onPlay, onSettings, onCo
           </span>
         </div>
 
-        {walletAddress ? (
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-white/60 rounded-full px-4 py-2 border border-[#161B32]/15">
-              <MonadCoin size={18} />
-              <span className="text-[#161B32] font-bold text-sm font-mono">{monBalance}</span>
-              <span className="text-[#6246ea] text-xs font-bold">MON</span>
-            </div>
-            <div className="bg-white/60 rounded-full px-4 py-2 text-xs font-mono text-[#161B32] border border-[#161B32]/15">
-              {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={onConnect}
-            className="bg-[#161B32] text-[#E6E6FF] rounded-full px-5 py-2 text-sm font-bold hover:opacity-90 transition-opacity"
+        <div className="flex items-center gap-3">
+          <Link
+            href="/register"
+            className="hidden sm:inline-block bg-[#6246ea] text-white rounded-full px-4 py-2 text-xs font-black tracking-wide hover:opacity-90 transition-opacity"
           >
-            Connect Wallet
-          </button>
-        )}
+            ⚒ BUILD AGENT
+          </Link>
+          {walletAddress ? (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-white/60 rounded-full px-4 py-2 border border-[#161B32]/15">
+                <MonadCoin size={18} />
+                <span className="text-[#161B32] font-bold text-sm font-mono">{monBalance}</span>
+                <span className="text-[#6246ea] text-xs font-bold">MON</span>
+              </div>
+              <div className="bg-white/60 rounded-full px-4 py-2 text-xs font-mono text-[#161B32] border border-[#161B32]/15">
+                {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={onConnect}
+              className="bg-[#161B32] text-[#E6E6FF] rounded-full px-5 py-2 text-sm font-bold hover:opacity-90 transition-opacity"
+            >
+              Connect Wallet
+            </button>
+          )}
+        </div>
       </header>
 
       {/* ── Hero card ── */}
