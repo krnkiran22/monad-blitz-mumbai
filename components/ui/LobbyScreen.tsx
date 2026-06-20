@@ -7,6 +7,7 @@ import { MonadMark, MonadCoin } from "./MonadMark";
 import { AGENT_PERSONALITIES } from "../agent/brain";
 import { useMultiplayer } from "../game/multiplayer";
 import type { ArenaState } from "../chain/useArena";
+import { BETTING_ENABLED } from "../chain/config";
 
 const MapPreview = dynamic(
   () => import("../game/MapPreview").then((m) => ({ default: m.MapPreview })),
@@ -235,6 +236,7 @@ export function LobbyScreen({
               </div>
 
               {/* ── Pre-match betting: stake here, BEFORE entering the arena ── */}
+              {BETTING_ENABLED && (
               <div className="glass rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs text-gray-400 font-bold tracking-widest">PLACE YOUR BETS</p>
@@ -339,6 +341,7 @@ export function LobbyScreen({
                   </div>
                 )}
               </div>
+              )}
 
               <div className="glass rounded-2xl p-5">
                 <p className="text-xs text-gray-400 font-bold tracking-widest mb-3">COMBATANTS</p>

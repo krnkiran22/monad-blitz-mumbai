@@ -17,6 +17,12 @@ export const monadTestnet = {
 export const ARENA_CONTRACT_ADDRESS = (process.env.NEXT_PUBLIC_ARENA_ADDRESS ||
   "0x0000000000000000000000000000000000000000") as `0x${string}`;
 
+// Toggle the on-chain betting flow. When NEXT_PUBLIC_ENABLE_BETTING is "false"
+// the lobby hides the betting card and the match starts straight away; any
+// other value (or unset) keeps the full bet-then-watch flow.
+export const BETTING_ENABLED =
+  process.env.NEXT_PUBLIC_ENABLE_BETTING !== "false";
+
 export const ARENA_ABI = [
   {
     inputs: [],

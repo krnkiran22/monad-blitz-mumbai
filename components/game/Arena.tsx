@@ -41,6 +41,7 @@ export interface MatchStats {
 }
 
 const AGENT_RADIUS = 0.55;
+const BULLET_FORWARD = new THREE.Vector3(0, 0, 1);
 
 // Is the point inside any obstacle box (with optional inflation)? Used both for
 // bullet hits (y-aware) and agent collision (y ignored via full height span).
@@ -266,13 +267,15 @@ function BulletSystem({
     for (let i = 0; i < MAX_BULLETS; i++) {
       const b = bullets[i];
       if (b && b.active) {
-        b.pos.addScaledVector(b.vel, dt * 22);
+        b.pos.addScaledVector(b.vel, dt * 26);
         // Despawn when it flies off the arena or slams into a container.
         if (b.pos.length() > 40 || pointInObstacle(b.pos.x, b.pos.y, b.pos.z, obstacles)) {
           b.active = false;
         }
         dummy.current.position.copy(b.pos);
-        dummy.current.scale.setScalar(1);
+        // Elongate along the flight direction so it reads as a glowing tracer.
+        dummy.current.quaternion.setFromUnitVectors(BULLET_FORWARD, b.vel);
+        dummy.current.scale.set(1, 1, 4);
       } else {
         dummy.current.position.set(0, -1000, 0);
         dummy.current.scale.setScalar(0);
@@ -285,8 +288,8 @@ function BulletSystem({
 
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, MAX_BULLETS]}>
-      <sphereGeometry args={[0.09, 8, 8]} />
-      <meshBasicMaterial color="#facc15" toneMapped={false} />
+      <sphereGeometry args={[0.16, 10, 10]} />
+      <meshBasicMaterial color="#fff27a" toneMapped={false} blending={THREE.AdditiveBlending} />
     </instancedMesh>
   );
 }
