@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import { MonadMark, MonadCoin } from "./MonadMark";
-import { AGENT_PERSONALITIES } from "../agent/brain";
 
 const MenuScene = dynamic(
   () => import("../game/MenuScene").then((m) => ({ default: m.MenuScene })),
@@ -20,7 +19,10 @@ interface Props {
 
 export function HomeScreen({ walletAddress, monBalance, onPlay, onSettings, onConnect }: Props) {
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[#0a0613]">
+    <div
+      className="relative h-screen w-screen overflow-hidden"
+      style={{ background: "linear-gradient(160deg, #3a2a82 0%, #241657 50%, #160d38 100%)" }}
+    >
       {/* Live 3D battlefield background */}
       <div className="absolute inset-0 z-0">
         <MenuScene />
@@ -127,59 +129,13 @@ export function HomeScreen({ walletAddress, monBalance, onPlay, onSettings, onCo
         </motion.div>
       </main>
 
-      {/* Agent roster strip */}
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.3 }}
-        className="absolute bottom-12 right-8 z-10 hidden md:flex gap-3"
-      >
-        {AGENT_PERSONALITIES.map((agent, i) => (
-          <div
-            key={i}
-            className="glass rounded-2xl p-3 w-32 flex flex-col items-center text-center hover:scale-[1.04] transition-transform"
-            style={{ borderColor: `${agent.color}55` }}
-          >
-            <div className="relative mb-1.5">
-              <span className="absolute inset-0 rounded-full pulse-ring" style={{ background: agent.color }} />
-              <div
-                className="relative w-9 h-9 rounded-full flex items-center justify-center font-black text-black text-sm"
-                style={{ background: agent.color, boxShadow: `0 0 16px ${agent.color}` }}
-              >
-                {agent.name[0]}
-              </div>
-            </div>
-            <span className="font-black text-white text-sm tracking-wide">{agent.name}</span>
-            <span className="text-[10px] text-gray-400 mb-1.5">{agent.weapon}</span>
-            <div className="w-full space-y-1">
-              <StatBar label="PWR" value={agent.aggression} color={agent.color} />
-              <StatBar label="SPD" value={agent.speed / 1.3} color={agent.color} />
-            </div>
-          </div>
-        ))}
-      </motion.div>
-
       {/* Footer */}
-      <footer className="absolute bottom-4 left-0 right-0 z-10 flex items-center justify-center gap-2 text-xs text-gray-500">
+      <footer className="absolute bottom-4 left-0 right-0 z-10 flex items-center justify-center gap-2 text-xs text-gray-400">
         <span>Powered by</span>
         <MonadMark size={14} />
-        <span className="font-bold text-[#836ef9]">Monad</span>
+        <span className="font-bold text-[#a78bfa]">Monad</span>
         <span>· 10,000 TPS · 400ms blocks</span>
       </footer>
-    </div>
-  );
-}
-
-function StatBar({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[8px] text-gray-500 w-6 text-left">{label}</span>
-      <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
-        <div
-          className="h-full rounded-full"
-          style={{ width: `${Math.min(100, value * 100)}%`, background: color }}
-        />
-      </div>
     </div>
   );
 }

@@ -5,26 +5,26 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Environment, Float } from "@react-three/drei";
 import * as THREE from "three";
 import { CharacterSoldier } from "./CharacterSoldier";
-import { GameMap } from "./GameMap";
 import { AGENT_PERSONALITIES } from "../agent/brain";
 
-// Three hero soldiers posed for the main-menu hero shot — all facing the
-// camera and firing, so the menu reads as a live front-on firefight.
+// Hero shot like stellar_strike: the middle agent stands tall and alone while
+// the two flanking agents open fire — all facing the camera.
 const HEROES: {
   pos: [number, number, number];
   rot: [number, number, number];
   anim: string;
 }[] = [
-  { pos: [-3.4, 0, 1.8], rot: [0, 0.28, 0], anim: "Idle_Shoot" },
-  { pos: [0, 0, 0.6], rot: [0, 0, 0], anim: "Idle_Shoot" },
-  { pos: [3.4, 0, 1.8], rot: [0, -0.28, 0], anim: "Idle_Shoot" },
+  { pos: [3.0, 0, 1.4], rot: [0, 0.16, 0], anim: "Idle_Shoot" },
+  { pos: [5.2, 0, -0.4], rot: [0, 0, 0], anim: "Idle" },
+  { pos: [7.4, 0, 1.4], rot: [0, -0.16, 0], anim: "Idle_Shoot" },
 ];
 
-// Fixed front-on camera (no orbit) so the home screen shows the agents head-on.
+// Fixed front-on camera (no orbit). It looks to the left of the trio so the
+// agents sit in the right half of the screen and the hero text stays clear.
 function StaticCam() {
   useFrame(({ camera }) => {
-    camera.position.set(0, 3.2, 10.5);
-    camera.lookAt(0, 1.5, 0);
+    camera.position.set(1.5, 3.3, 11);
+    camera.lookAt(2.6, 1.4, 0);
   });
   return null;
 }
@@ -59,31 +59,26 @@ function Dust() {
   );
 }
 
-export function MenuScene({ mapFile = "/models/map.glb" }: { mapFile?: string }) {
+export function MenuScene() {
   return (
     <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 5, 12], fov: 42 }} style={{ background: "transparent" }}>
-      <fog attach="fog" args={["#0a0613", 14, 34]} />
-      <ambientLight intensity={0.9} />
-      <hemisphereLight intensity={0.6} groundColor="#160f2e" color="#cbb6ff" />
-      <directionalLight position={[8, 18, 6]} intensity={2.2} castShadow shadow-mapSize={[2048, 2048]}>
+      <ambientLight intensity={1.6} />
+      <hemisphereLight intensity={1.3} groundColor="#b9a7ff" color="#ffffff" />
+      <directionalLight position={[8, 18, 6]} intensity={3} castShadow shadow-mapSize={[2048, 2048]}>
         <orthographicCamera attach="shadow-camera" args={[-15, 15, 15, -15, 0.1, 60]} />
       </directionalLight>
-      <pointLight position={[0, 6, -4]} intensity={2} color="#836ef9" distance={30} />
-      <spotLight position={[-6, 10, 8]} intensity={2} angle={0.6} penumbra={0.8} color="#a78bfa" />
+      <pointLight position={[0, 6, -4]} intensity={2.4} color="#a78bfa" distance={40} />
+      <spotLight position={[-6, 10, 8]} intensity={2.4} angle={0.6} penumbra={0.8} color="#c4b5fd" />
 
       <Suspense fallback={null}>
-        <Environment preset="night" />
+        <Environment preset="city" />
       </Suspense>
 
-      {/* Ground catch for shadows + reflection-ish base */}
+      {/* Bright stage the heroes stand on — no map, so nothing blocks the view. */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
         <circleGeometry args={[16, 64]} />
-        <meshStandardMaterial color="#120c26" roughness={0.85} metalness={0.2} />
+        <meshStandardMaterial color="#d9d2ff" roughness={0.9} metalness={0.05} />
       </mesh>
-
-      <Suspense fallback={null}>
-        <GameMap mapFile={mapFile} />
-      </Suspense>
 
       <Suspense fallback={null}>
         {HEROES.map((h, i) => (
