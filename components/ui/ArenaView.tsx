@@ -3,9 +3,6 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMultiplayerState } from "playroomkit";
-import { BettingPanel } from "./BettingPanel";
-import { Dashboard } from "./Dashboard";
-import { PreMatchBetModal } from "./PreMatchBetModal";
 import { MonadMark, MonadCoin } from "./MonadMark";
 import { useMultiplayer } from "../game/multiplayer";
 import { AGENT_PERSONALITIES } from "../agent/brain";
@@ -32,7 +29,6 @@ function ArenaSkeleton() {
 
 interface Props {
   initialMapFile: string;
-  settings: { betStep: string };
   arenaSettings: ArenaSettings;
   arenaState: ArenaState;
   walletAddress: string;
@@ -41,17 +37,12 @@ interface Props {
   AGENT_COLORS: string[];
   onBack: () => void;
   onOpenSettings: () => void;
-  onConnectWallet: () => void;
-  onBet: (agentId: number, amount: string) => void;
   onClaim: (matchId: bigint) => void;
-  onOpenBetting: () => Promise<void> | void;
-  onLockBetting: () => Promise<void> | void;
   onSettleMatch: (winnerId: number) => Promise<void> | void;
 }
 
 export function ArenaView({
   initialMapFile,
-  settings,
   arenaSettings,
   arenaState,
   walletAddress,
@@ -60,15 +51,10 @@ export function ArenaView({
   AGENT_COLORS,
   onBack,
   onOpenSettings,
-  onConnectWallet,
-  onBet,
   onClaim,
-  onOpenBetting,
-  onLockBetting,
   onSettleMatch,
 }: Props) {
   const { isHost, roomCode, playerCount } = useMultiplayer();
-  const [betModalOpen, setBetModalOpen] = useState(false);
 
   // Host-authoritative match state, mirrored to every spectator in the room.
   const [matchRunning, setMatchRunning] = useMultiplayerState("matchRunning", false);
@@ -111,28 +97,31 @@ export function ArenaView({
     [isHost, setStats]
   );
 
-  // START MATCH now opens the betting gate first.
-  const handleStartPressed = useCallback(() => {
+  // Betting already happened in the lobby — the arena is watch-only and the
+  // host's fight starts automatically a beat after entering.
+  const beginMatch = useCallback(() => {
     if (!isHost) return;
-    setBetModalOpen(true);
-  }, [isHost]);
-
-  // Lock the on-chain bets (only if a round is actually open), then run the
-  // visual fight for the whole room.
-  const handleStartFight = useCallback(async () => {
-    if (!isHost) return;
-    if (walletAddress && arenaState.bettingOpen) {
-      try {
-        await onLockBetting();
-      } catch {
-        // not owner / already closed — start the fight anyway
-      }
-    }
-    setBetModalOpen(false);
     setWinner(null);
     setStats({ timeLeft: 60, kills: [0, 0, 0] });
     setMatchRunning(true);
-  }, [isHost, walletAddress, arenaState.bettingOpen, onLockBetting, setMatchRunning, setWinner, setStats]);
+  }, [isHost, setMatchRunning, setWinner, setStats]);
+
+  // Kick the fight off shortly after the host enters. The guard lives inside the
+  // timer (not the effect body) so React Strict Mode's mount/cleanup/mount cycle
+  // still reschedules, while the start itself only ever runs once.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!isHost) return;
+    const t = setTimeout(() => {
+      if (autoStarted.current) return;
+      autoStarted.current = true;
+      setWinner(null);
+      setStats({ timeLeft: 60, kills: [0, 0, 0] });
+      setMatchRunning(true);
+    }, 1600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHost]);
 
   // Cycle the spectator POV. -1 (free) → 0 → 1 → 2 → -1 …
   const cycleSpectate = useCallback((dir: 1 | -1) => {
@@ -238,14 +227,22 @@ export function ArenaView({
           />
 
           {!matchRunning && winner === null && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="text-center glass rounded-2xl p-8">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center glass rounded-2xl p-8 max-w-sm">
                 <h2 className="text-2xl font-black mb-2 shimmer">READY TO BATTLE</h2>
-                <p className="text-gray-400 text-sm max-w-xs">
+                <p className="text-gray-400 text-sm mb-5">
                   {isHost
-                    ? "3 autonomous AI agents fight a 60-second deathmatch with respawns. Most kills wins. Hit START MATCH — everyone in your room watches live."
+                    ? "Bets are locked. 3 AI agents fight a 60-second deathmatch with respawns — most kills wins. Starting the fight…"
                     : "Waiting for the host to start the match. You'll watch the same fight in real time."}
                 </p>
+                {isHost && (
+                  <button
+                    onClick={beginMatch}
+                    className="px-6 py-2.5 rounded-xl bg-linear-to-r from-[#836ef9] to-[#6246ea] hover:opacity-90 font-black text-white tracking-wide transition-opacity"
+                  >
+                    START NOW
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -347,6 +344,15 @@ export function ArenaView({
                 ) : (
                   <p className="text-gray-400 text-xs">Result recorded on Monad Testnet · winners can claim payouts</p>
                 )}
+
+                {isHost && (
+                  <button
+                    onClick={beginMatch}
+                    className="mt-3 w-full py-2.5 rounded-xl glass hover:bg-white/10 font-bold text-white text-sm tracking-wide transition-colors"
+                  >
+                    WATCH AGAIN
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -397,53 +403,7 @@ export function ArenaView({
             )}
           </button>
         </div>
-
-        <div
-          className={`w-full lg:w-[340px] shrink-0 border-t lg:border-t-0 lg:border-l border-[#836ef9]/15 overflow-y-auto bg-black/20 ${
-            isFullscreen ? "hidden" : ""
-          }`}
-        >
-          <div className="p-4 space-y-6">
-            <BettingPanel
-              arenaState={arenaState}
-              walletAddress={walletAddress}
-              loading={loading}
-              defaultBet={settings.betStep}
-              onConnect={onConnectWallet}
-              onBet={onBet}
-              colors={AGENT_COLORS}
-            />
-            <div className="border-t border-[#836ef9]/15" />
-            <Dashboard
-              arenaState={arenaState}
-              matchRunning={matchRunning}
-              winner={winner}
-              walletAddress={walletAddress}
-              loading={loading}
-              isHost={isHost}
-              onClaim={() => onClaim(arenaState.matchId)}
-              onStartMatch={handleStartPressed}
-              colors={AGENT_COLORS}
-            />
-          </div>
-        </div>
       </div>
-
-      <PreMatchBetModal
-        open={betModalOpen}
-        arenaState={arenaState}
-        names={AGENT_NAMES}
-        colors={AGENT_COLORS}
-        walletAddress={walletAddress}
-        monBalance={monBalance}
-        loading={loading}
-        defaultBet={settings.betStep}
-        onConnect={onConnectWallet}
-        onOpenBetting={onOpenBetting}
-        onPlaceBet={onBet}
-        onStartFight={handleStartFight}
-        onClose={() => setBetModalOpen(false)}
-      />
     </div>
   );
 }

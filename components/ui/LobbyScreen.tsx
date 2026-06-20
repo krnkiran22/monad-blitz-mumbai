@@ -5,6 +5,10 @@ import { motion } from "framer-motion";
 import { MonadMark, MonadCoin } from "./MonadMark";
 import { AGENT_PERSONALITIES } from "../agent/brain";
 import { useMultiplayer } from "../game/multiplayer";
+import type { ArenaState } from "../chain/useArena";
+
+const QUICK_BETS = ["0.1", "0.5", "1"];
+const AGENT_NAMES = AGENT_PERSONALITIES.map((a) => a.name);
 
 const MAP_LIST = [
   { name: "Free Arena", file: "/models/map.glb", tag: "CLASSIC" },
@@ -17,21 +21,62 @@ const MAP_LIST = [
 interface Props {
   walletAddress: string;
   monBalance: string;
+  arenaState: ArenaState;
+  loading: boolean;
+  defaultBet: string;
+  AGENT_COLORS: string[];
   onBack: () => void;
   onEnter: (mapFile: string) => void;
   onConnect: () => void;
+  onOpenBetting: () => Promise<void> | void;
+  onPlaceBet: (agentId: number, amount: string) => void;
+  onLockBetting: () => Promise<void> | void;
 }
 
-export function LobbyScreen({ walletAddress, monBalance, onBack, onEnter, onConnect }: Props) {
+export function LobbyScreen({
+  walletAddress,
+  monBalance,
+  arenaState,
+  loading,
+  defaultBet,
+  AGENT_COLORS,
+  onBack,
+  onEnter,
+  onConnect,
+  onOpenBetting,
+  onPlaceBet,
+  onLockBetting,
+}: Props) {
   const { status, roomCode, isHost, playerCount, error, connect } = useMultiplayer();
   const [role, setRole] = useState<"none" | "host" | "client">("none");
   const [joinCode, setJoinCode] = useState("");
   const [mapIndex, setMapIndex] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [betAmount, setBetAmount] = useState(
+    defaultBet && parseFloat(defaultBet) >= 0.1 ? defaultBet : "0.5"
+  );
+  const [entering, setEntering] = useState(false);
 
   const map = MAP_LIST[mapIndex];
   const connecting = status === "connecting";
   const connected = status === "connected";
+
+  const { bettingOpen, myBets, totalPot, isOwner } = arenaState;
+  const myStake = myBets.reduce((s, b) => s + parseFloat(b || "0"), 0);
+
+  // Host locks the on-chain round (if open) before everyone watches the fight.
+  const enterArena = async () => {
+    if (isHost && walletAddress && bettingOpen && isOwner) {
+      setEntering(true);
+      try {
+        await onLockBetting();
+      } catch {
+        // not owner / already closed — enter anyway
+      }
+      setEntering(false);
+    }
+    onEnter(map.file);
+  };
 
   const createRoom = () => {
     setRole("host");
@@ -181,6 +226,85 @@ export function LobbyScreen({ walletAddress, monBalance, onBack, onEnter, onConn
                 </div>
               </div>
 
+              {/* ── Pre-match betting: stake here, BEFORE entering the arena ── */}
+              <div className="glass rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-gray-400 font-bold tracking-widest">PLACE YOUR BETS</p>
+                  <span className="flex items-center gap-1 text-[11px] text-gray-400">
+                    pot <MonadCoin size={12} /> <span className="text-white font-bold">{parseFloat(totalPot).toFixed(2)}</span>
+                  </span>
+                </div>
+
+                {!walletAddress ? (
+                  <button
+                    onClick={onConnect}
+                    className="w-full py-2.5 rounded-xl bg-[#836ef9] hover:bg-[#7058f0] font-bold text-white text-sm transition-colors"
+                  >
+                    Connect Wallet to Bet
+                  </button>
+                ) : !bettingOpen ? (
+                  isOwner ? (
+                    <button
+                      onClick={onOpenBetting}
+                      disabled={loading}
+                      className="w-full py-2.5 rounded-xl bg-[#836ef9] hover:bg-[#7058f0] disabled:opacity-50 font-bold text-white text-sm transition-colors"
+                    >
+                      {loading ? "Opening…" : "Open Betting Round"}
+                    </button>
+                  ) : (
+                    <p className="text-[11px] text-gray-400 text-center py-2">
+                      Waiting for the host to open a betting round…
+                    </p>
+                  )
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0.001"
+                        step="0.1"
+                        value={betAmount}
+                        onChange={(e) => setBetAmount(e.target.value)}
+                        className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm font-bold focus:outline-none focus:border-[#836ef9]"
+                      />
+                      {QUICK_BETS.map((q) => (
+                        <button
+                          key={q}
+                          onClick={() => setBetAmount(q)}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${
+                            betAmount === q ? "bg-[#836ef9] text-white" : "bg-white/5 text-gray-300 hover:bg-white/10"
+                          }`}
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                    {AGENT_NAMES.map((name, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: AGENT_COLORS[i] }} />
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-white truncate leading-none">{name}</p>
+                            <p className="text-[10px] text-gray-400">my bet: {parseFloat(myBets[i] || "0").toFixed(2)} MON</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => onPlaceBet(i, betAmount)}
+                          disabled={loading || !betAmount || parseFloat(betAmount) <= 0}
+                          className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-white disabled:opacity-50 transition-transform hover:scale-105 shrink-0"
+                          style={{ background: AGENT_COLORS[i] }}
+                        >
+                          Bet {betAmount}
+                        </button>
+                      </div>
+                    ))}
+                    <p className="text-[11px] text-gray-400 text-center pt-1">
+                      My stake: <span className="text-white font-bold">{myStake.toFixed(2)} MON</span> · winners split the pot
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <div className="glass rounded-2xl p-5">
                 <p className="text-xs text-gray-400 font-bold tracking-widest mb-3">COMBATANTS</p>
                 <div className="space-y-3">
@@ -255,18 +379,21 @@ export function LobbyScreen({ walletAddress, monBalance, onBack, onEnter, onConn
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => onEnter(map.file)}
-                className="mt-4 relative"
+                onClick={enterArena}
+                disabled={entering}
+                className="mt-4 relative disabled:opacity-70"
               >
                 <span className="absolute inset-0 rounded-2xl bg-[#836ef9] blur-lg opacity-50" />
                 <span className="relative flex items-center justify-center gap-3 w-full py-5 rounded-2xl bg-gradient-to-r from-[#836ef9] to-[#6246ea] text-white font-black text-xl tracking-widest">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-                  {isHost ? "ENTER ARENA" : "WATCH MATCH"}
+                  {entering ? "LOCKING BETS…" : isHost ? "ENTER ARENA" : "WATCH MATCH"}
                 </span>
               </motion.button>
-              {!isHost && (
-                <p className="text-center text-gray-500 text-xs mt-2">The host controls the map &amp; match start.</p>
-              )}
+              <p className="text-center text-gray-500 text-xs mt-2">
+                {isHost
+                  ? "Bets lock when you enter — then the fight begins, watch it live."
+                  : "The host controls the map & match start. Place your bets above first."}
+              </p>
             </motion.div>
           </div>
         </main>

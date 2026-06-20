@@ -66,8 +66,15 @@ function Game() {
       <LobbyScreen
         walletAddress={walletAddress}
         monBalance={monBalance}
+        arenaState={state}
+        loading={loading}
+        defaultBet={settings.betStep}
+        AGENT_COLORS={AGENT_COLORS}
         onBack={() => setScreen("home")}
         onConnect={connectWallet}
+        onOpenBetting={openBetting}
+        onPlaceBet={placeBet}
+        onLockBetting={lockBetting}
         onEnter={(selectedMap) => {
           setMapFile(selectedMap);
           setScreen("arena");
@@ -80,7 +87,6 @@ function Game() {
     <>
       <ArenaView
         initialMapFile={mapFile}
-        settings={{ betStep: settings.betStep }}
         arenaSettings={arenaSettings}
         arenaState={state}
         walletAddress={walletAddress}
@@ -89,11 +95,7 @@ function Game() {
         AGENT_COLORS={AGENT_COLORS}
         onBack={() => setScreen("lobby")}
         onOpenSettings={() => setSettingsOpen(true)}
-        onConnectWallet={connectWallet}
-        onBet={placeBet}
         onClaim={claimWinnings}
-        onOpenBetting={openBetting}
-        onLockBetting={lockBetting}
         onSettleMatch={settleMatch}
       />
       <SettingsModal
