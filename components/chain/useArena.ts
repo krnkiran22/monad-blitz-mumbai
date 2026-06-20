@@ -60,71 +60,61 @@ export function useArena(address?: string) {
 
   const refresh = useCallback(async () => {
     const client = getPublicClient();
-
-    if (walletAddress) {
-      try {
-        const bal = await client.getBalance({ address: walletAddress as `0x${string}` });
-        setMonBalance(parseFloat(formatEther(bal)).toFixed(3));
-      } catch {
-        // ignore balance errors
-      }
-    }
+    const read = (functionName: string, args?: unknown[]) =>
+      client.readContract({ address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI, functionName, args } as never);
 
     try {
-      const [matchId, bettingOpen, matchActive, lastWinner] = await Promise.all([
-        client.readContract({ address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI, functionName: "matchId" }),
-        client.readContract({ address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI, functionName: "bettingOpen" }),
-        client.readContract({ address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI, functionName: "matchActive" }),
-        client.readContract({ address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI, functionName: "lastWinner" }),
+      // matchId is needed for the per-match reads, so fetch it (and the wallet
+      // balance) first; then fire EVERYTHING else off in a single parallel wave
+      // so a refresh is one round-trip instead of six.
+      const [matchId, bal] = await Promise.all([
+        read("matchId") as Promise<bigint>,
+        walletAddress
+          ? client.getBalance({ address: walletAddress as `0x${string}` })
+          : Promise.resolve(null),
+      ]);
+      if (bal !== null) setMonBalance(parseFloat(formatEther(bal)).toFixed(3));
+
+      const w = walletAddress as `0x${string}` | undefined;
+      const [
+        bettingOpen,
+        matchActive,
+        lastWinner,
+        totalPot,
+        betAmounts,
+        agent0,
+        agent1,
+        agent2,
+        matchSettled,
+        owner,
+        myBet0,
+        myBet1,
+        myBet2,
+        claim,
+      ] = await Promise.all([
+        read("bettingOpen"),
+        read("matchActive"),
+        read("lastWinner"),
+        read("getTotalPot", [matchId]),
+        read("getBetAmounts", [matchId]),
+        read("getAgent", [0]),
+        read("getAgent", [1]),
+        read("getAgent", [2]),
+        read("matchSettled", [matchId]),
+        read("owner"),
+        w ? read("getMyBet", [matchId, w, 0]) : Promise.resolve(0n),
+        w ? read("getMyBet", [matchId, w, 1]) : Promise.resolve(0n),
+        w ? read("getMyBet", [matchId, w, 2]) : Promise.resolve(0n),
+        w ? read("previewClaim", [matchId, w]) : Promise.resolve(0n),
       ]);
 
-      const totalPot = await client.readContract({
-        address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI,
-        functionName: "getTotalPot", args: [matchId],
-      });
-
-      const betAmounts = await client.readContract({
-        address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI,
-        functionName: "getBetAmounts", args: [matchId],
-      });
-
-      const agentData = await Promise.all(
-        [0, 1, 2].map((i) =>
-          client.readContract({
-            address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI,
-            functionName: "getAgent", args: [i as 0 | 1 | 2],
-          })
-        )
-      );
-
-      const [matchSettled, owner] = await Promise.all([
-        client.readContract({
-          address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI,
-          functionName: "matchSettled", args: [matchId],
-        }),
-        client.readContract({ address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI, functionName: "owner" }),
-      ]);
-
-      let myBets: [string, string, string] = ["0", "0", "0"];
-      let claimable = "0";
-      if (walletAddress) {
-        const myBetAmounts = await Promise.all(
-          [0, 1, 2].map((i) =>
-            client.readContract({
-              address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI,
-              functionName: "getMyBet",
-              args: [matchId, walletAddress as `0x${string}`, i as 0 | 1 | 2],
-            })
-          )
-        );
-        myBets = myBetAmounts.map((b) => formatEther(b as bigint)) as [string, string, string];
-
-        const claim = await client.readContract({
-          address: ARENA_CONTRACT_ADDRESS, abi: ARENA_ABI,
-          functionName: "previewClaim", args: [matchId, walletAddress as `0x${string}`],
-        });
-        claimable = formatEther(claim as bigint);
-      }
+      const agentData = [agent0, agent1, agent2];
+      const myBets: [string, string, string] = [
+        formatEther(myBet0 as bigint),
+        formatEther(myBet1 as bigint),
+        formatEther(myBet2 as bigint),
+      ];
+      const claimable = formatEther(claim as bigint);
 
       const betAmountsArr = betAmounts as [bigint, bigint, bigint];
 
@@ -156,7 +146,9 @@ export function useArena(address?: string) {
 
   useEffect(() => {
     refresh();
-    const interval = setInterval(refresh, 5000);
+    // Monad's ~400ms blocks make frequent polling cheap; 1.5s keeps bets, the
+    // pot, and the claim button feeling near-instant after a tx lands.
+    const interval = setInterval(refresh, 1500);
     return () => clearInterval(interval);
   }, [refresh]);
 
