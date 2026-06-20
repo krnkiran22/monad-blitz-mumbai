@@ -7,46 +7,92 @@ import * as THREE from "three";
 import { CharacterSoldier } from "./CharacterSoldier";
 import { AGENT_PERSONALITIES } from "../agent/brain";
 
-// Hero shot like stellar_strike: the middle agent stands tall and alone while
-// the two flanking agents fire short bursts — all facing the camera.
-const HEROES: {
-  pos: [number, number, number];
-  rot: [number, number, number];
-  shoot: boolean;
-  offset: number; // ms before the first burst, so flankers fire out of sync
-}[] = [
-  { pos: [3.0, 0, 1.4], rot: [0, 0.16, 0], shoot: true, offset: 200 },
-  { pos: [5.2, 0, -0.4], rot: [0, 0, 0], shoot: false, offset: 0 },
-  { pos: [7.4, 0, 1.4], rot: [0, -0.16, 0], shoot: true, offset: 1300 },
+// Three agents in a line; 0 = left (red), 1 = middle (blue), 2 = right (green).
+const HERO_POS: [number, number, number][] = [
+  [3.0, 0, 1.4],
+  [5.2, 0, -0.4],
+  [7.4, 0, 1.4],
 ];
 
-const BURST_MS = 1000; // a short volley (~two shots)
-const GAP_MS = 1600; // pause between bursts
+// 3/4-view aim yaws (atan2(dx,dz) scaled so faces stay partly toward camera).
+const AIM_R0 = 0.94; // agent 0 turns toward the right flank
+const AIM_L2 = -0.94; // agent 2 turns toward the left flank
+const AIM_R1 = 0.53; // agent 1 (middle) turns toward the right flank
 
-// One menu agent. Shooters cycle between a short burst and a pause instead of
-// firing continuously.
-function Hero({ index, shoot, offset }: { index: number; shoot: boolean; offset: number }) {
-  const [anim, setAnim] = useState("Idle");
+// Scripted looping vignette: the right & left agents duel → left falls → the
+// middle finishes the surviving right agent → both fallen agents respawn.
+interface Phase {
+  t: number; // ms into the cycle this phase begins
+  anims: [string, string, string];
+  yaws: [number, number, number];
+}
+const PHASES: Phase[] = [
+  // duel: left (0) and right (2) trade fire, middle (1) watches
+  { t: 0, anims: ["Idle_Shoot", "Idle", "Idle_Shoot"], yaws: [AIM_R0, 0, AIM_L2] },
+  // left goes down
+  { t: 2000, anims: ["Death", "Idle", "Idle"], yaws: [AIM_R0, 0, AIM_L2] },
+  // middle turns and opens fire on the surviving right agent
+  { t: 3100, anims: ["Death", "Idle_Shoot", "Idle"], yaws: [AIM_R0, AIM_R1, 0] },
+  // right goes down
+  { t: 5000, anims: ["Death", "Idle", "Death"], yaws: [AIM_R0, AIM_R1, 0] },
+  // both fallen agents respawn and reset to the hero stance
+  { t: 6300, anims: ["Idle", "Idle", "Idle"], yaws: [0, 0, 0] },
+];
+const CYCLE_MS = 7400;
 
-  useEffect(() => {
-    if (!shoot) {
-      setAnim("Idle");
-      return;
+function lerpAngle(a: number, b: number, t: number): number {
+  let d = b - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
+}
+
+// Drives the timeline: flips animation state on phase changes and publishes the
+// per-agent target yaws into a ref the heroes lerp toward each frame.
+function Director({
+  setAnims,
+  yawRef,
+}: {
+  setAnims: (a: [string, string, string]) => void;
+  yawRef: React.MutableRefObject<[number, number, number]>;
+}) {
+  const phaseRef = useRef(-1);
+  const startRef = useRef(0);
+  useFrame(({ clock }) => {
+    if (startRef.current === 0) startRef.current = clock.elapsedTime;
+    const t = ((clock.elapsedTime - startRef.current) * 1000) % CYCLE_MS;
+    let idx = 0;
+    for (let i = 0; i < PHASES.length; i++) if (t >= PHASES[i].t) idx = i;
+    yawRef.current = PHASES[idx].yaws;
+    if (idx !== phaseRef.current) {
+      phaseRef.current = idx;
+      setAnims(PHASES[idx].anims);
     }
-    let timer: ReturnType<typeof setTimeout>;
-    let firing = false;
-    const loop = () => {
-      firing = !firing;
-      setAnim(firing ? "Idle_Shoot" : "Idle");
-      timer = setTimeout(loop, firing ? BURST_MS : GAP_MS);
-    };
-    timer = setTimeout(loop, offset);
-    return () => clearTimeout(timer);
-  }, [shoot, offset]);
+  });
+  return null;
+}
+
+// One menu agent: renders the colored ground ring + soldier and smoothly turns
+// toward its scripted facing.
+function Hero({
+  index,
+  anim,
+  yawRef,
+}: {
+  index: number;
+  anim: string;
+  yawRef: React.MutableRefObject<[number, number, number]>;
+}) {
+  const turn = useRef<THREE.Group>(null);
+  useFrame((_, dt) => {
+    if (!turn.current) return;
+    const target = yawRef.current[index] ?? 0;
+    turn.current.rotation.y = lerpAngle(turn.current.rotation.y, target, Math.min(1, dt * 6));
+  });
 
   const p = AGENT_PERSONALITIES[index];
   return (
-    <>
+    <group ref={turn}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
         <ringGeometry args={[0.5, 0.7, 32]} />
         <meshBasicMaterial color={p.color} transparent opacity={0.6} />
@@ -54,7 +100,7 @@ function Hero({ index, shoot, offset }: { index: number; shoot: boolean; offset:
       <Float speed={1.2} rotationIntensity={0} floatIntensity={0.15}>
         <CharacterSoldier color={p.color} animation={anim} weapon={p.weapon} scale={1.15} />
       </Float>
-    </>
+    </group>
   );
 }
 
@@ -99,6 +145,9 @@ function Dust() {
 }
 
 export function MenuScene() {
+  const [anims, setAnims] = useState<[string, string, string]>(["Idle", "Idle", "Idle"]);
+  const yawRef = useRef<[number, number, number]>([0, 0, 0]);
+
   return (
     <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 5, 12], fov: 42 }} style={{ background: "transparent" }}>
       <ambientLight intensity={1.6} />
@@ -120,13 +169,14 @@ export function MenuScene() {
       </mesh>
 
       <Suspense fallback={null}>
-        {HEROES.map((h, i) => (
-          <group key={i} position={h.pos} rotation={h.rot}>
-            <Hero index={i} shoot={h.shoot} offset={h.offset} />
+        {HERO_POS.map((pos, i) => (
+          <group key={i} position={pos}>
+            <Hero index={i} anim={anims[i]} yawRef={yawRef} />
           </group>
         ))}
       </Suspense>
 
+      <Director setAnims={setAnims} yawRef={yawRef} />
       <Dust />
       <StaticCam />
     </Canvas>
