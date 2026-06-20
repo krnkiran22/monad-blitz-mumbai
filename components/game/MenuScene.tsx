@@ -87,7 +87,7 @@ function Director({
 
 const MENU_FORWARD = new THREE.Vector3(0, 0, 1);
 const MENU_MAX_BULLETS = 60;
-const MENU_FIRE_INTERVAL = 70; // ms between tracers per shot line (dense stream)
+const MENU_FIRE_INTERVAL = 1000; // ms between tracers per shot line (one laser/sec)
 const MENU_BULLET_SPEED = 18; // units/sec — slow enough to clearly see
 
 interface MenuBullet {
