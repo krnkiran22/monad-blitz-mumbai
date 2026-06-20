@@ -14,6 +14,9 @@ const HERO_POS: [number, number, number][] = [
   [7.4, 0, 1.4],
 ];
 
+// Weapon held by each hero (right agent holds a pistol).
+const HERO_WEAPON = ["AK", "Sniper", "Pistol"];
+
 // 3/4-view aim yaws (atan2(dx,dz) scaled so faces stay partly toward camera).
 const AIM_R0 = 0.94; // agent 0 turns toward the right flank
 const AIM_L2 = -0.94; // agent 2 turns toward the left flank
@@ -25,18 +28,19 @@ interface Phase {
   t: number; // ms into the cycle this phase begins
   anims: [string, string, string];
   yaws: [number, number, number];
+  shots: [number, number][]; // [shooter, target] pairs firing this phase
 }
 const PHASES: Phase[] = [
   // duel: left (0) and right (2) trade fire, middle (1) watches
-  { t: 0, anims: ["Idle_Shoot", "Idle", "Idle_Shoot"], yaws: [AIM_R0, 0, AIM_L2] },
+  { t: 0, anims: ["Idle_Shoot", "Idle", "Idle_Shoot"], yaws: [AIM_R0, 0, AIM_L2], shots: [[0, 2], [2, 0]] },
   // left goes down
-  { t: 2000, anims: ["Death", "Idle", "Idle"], yaws: [AIM_R0, 0, AIM_L2] },
+  { t: 2000, anims: ["Death", "Idle", "Idle"], yaws: [AIM_R0, 0, AIM_L2], shots: [] },
   // middle turns and opens fire on the surviving right agent
-  { t: 3100, anims: ["Death", "Idle_Shoot", "Idle"], yaws: [AIM_R0, AIM_R1, 0] },
+  { t: 3100, anims: ["Death", "Idle_Shoot", "Idle"], yaws: [AIM_R0, AIM_R1, 0], shots: [[1, 2]] },
   // right goes down
-  { t: 5000, anims: ["Death", "Idle", "Death"], yaws: [AIM_R0, AIM_R1, 0] },
+  { t: 5000, anims: ["Death", "Idle", "Death"], yaws: [AIM_R0, AIM_R1, 0], shots: [] },
   // both fallen agents respawn and reset to the hero stance
-  { t: 6300, anims: ["Idle", "Idle", "Idle"], yaws: [0, 0, 0] },
+  { t: 6300, anims: ["Idle", "Idle", "Idle"], yaws: [0, 0, 0], shots: [] },
 ];
 const CYCLE_MS = 7400;
 
@@ -52,9 +56,11 @@ function lerpAngle(a: number, b: number, t: number): number {
 function Director({
   setAnims,
   yawRef,
+  shotsRef,
 }: {
   setAnims: (a: [string, string, string]) => void;
   yawRef: React.MutableRefObject<[number, number, number]>;
+  shotsRef: React.MutableRefObject<[number, number][]>;
 }) {
   const phaseRef = useRef(-1);
   const startRef = useRef(0);
@@ -64,12 +70,96 @@ function Director({
     let idx = 0;
     for (let i = 0; i < PHASES.length; i++) if (t >= PHASES[i].t) idx = i;
     yawRef.current = PHASES[idx].yaws;
+    shotsRef.current = PHASES[idx].shots;
     if (idx !== phaseRef.current) {
       phaseRef.current = idx;
       setAnims(PHASES[idx].anims);
     }
   });
   return null;
+}
+
+const MENU_FORWARD = new THREE.Vector3(0, 0, 1);
+const MENU_MAX_BULLETS = 60;
+const MENU_FIRE_INTERVAL = 70; // ms between tracers per shot line (dense stream)
+const MENU_BULLET_SPEED = 18; // units/sec — slow enough to clearly see
+
+interface MenuBullet {
+  active: boolean;
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  dist: number;
+  traveled: number;
+}
+
+// Visible gunfire for the vignette: spawns bright tracer streaks along the
+// active [shooter → target] lines while those agents are firing.
+function MenuBullets({ shotsRef }: { shotsRef: React.MutableRefObject<[number, number][]> }) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummy = useRef(new THREE.Object3D());
+  const lastFire = useRef<Record<string, number>>({});
+  const bullets = useRef<MenuBullet[]>(
+    Array.from({ length: MENU_MAX_BULLETS }, () => ({
+      active: false,
+      pos: new THREE.Vector3(),
+      vel: new THREE.Vector3(),
+      dist: 0,
+      traveled: 0,
+    }))
+  );
+
+  useFrame((_, raw) => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    const dt = Math.min(raw, 0.05);
+    const now = performance.now();
+
+    for (const [from, to] of shotsRef.current) {
+      const key = `${from}-${to}`;
+      if (now - (lastFire.current[key] || 0) < MENU_FIRE_INTERVAL) continue;
+      lastFire.current[key] = now;
+      const muzzle = new THREE.Vector3(HERO_POS[from][0], 1.15, HERO_POS[from][2]);
+      const target = new THREE.Vector3(HERO_POS[to][0], 1.1, HERO_POS[to][2]);
+      const dir = target.clone().sub(muzzle);
+      const dist = dir.length();
+      dir.normalize();
+      const slot = bullets.current.findIndex((b) => !b.active);
+      if (slot === -1) continue;
+      const b = bullets.current[slot];
+      b.active = true;
+      b.pos.copy(muzzle).addScaledVector(dir, 0.6); // start just past the muzzle
+      b.vel.copy(dir);
+      b.dist = dist;
+      b.traveled = 0.6;
+    }
+
+    for (let i = 0; i < MENU_MAX_BULLETS; i++) {
+      const b = bullets.current[i];
+      if (b.active) {
+        const step = dt * MENU_BULLET_SPEED;
+        b.pos.addScaledVector(b.vel, step);
+        b.traveled += step;
+        if (b.traveled >= b.dist) b.active = false;
+        dummy.current.position.copy(b.pos);
+        dummy.current.quaternion.setFromUnitVectors(MENU_FORWARD, b.vel);
+        dummy.current.scale.set(1, 1, 3.5);
+      } else {
+        dummy.current.position.set(0, -1000, 0);
+        dummy.current.scale.setScalar(0);
+      }
+      dummy.current.updateMatrix();
+      mesh.setMatrixAt(i, dummy.current.matrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    <instancedMesh ref={meshRef} args={[undefined, undefined, MENU_MAX_BULLETS]} frustumCulled={false}>
+      <sphereGeometry args={[0.17, 10, 10]} />
+      {/* Solid bright orange (not additive) so it stays visible on the light card. */}
+      <meshBasicMaterial color="#ff5a00" toneMapped={false} />
+    </instancedMesh>
+  );
 }
 
 // One menu agent: renders the colored ground ring + soldier and smoothly turns
@@ -98,7 +188,7 @@ function Hero({
         <meshBasicMaterial color={p.color} transparent opacity={0.6} />
       </mesh>
       <Float speed={1.2} rotationIntensity={0} floatIntensity={0.15}>
-        <CharacterSoldier color={p.color} animation={anim} weapon={p.weapon} scale={1.15} />
+        <CharacterSoldier color={p.color} animation={anim} weapon={HERO_WEAPON[index]} scale={1.15} />
       </Float>
     </group>
   );
@@ -147,6 +237,7 @@ function Dust() {
 export function MenuScene() {
   const [anims, setAnims] = useState<[string, string, string]>(["Idle", "Idle", "Idle"]);
   const yawRef = useRef<[number, number, number]>([0, 0, 0]);
+  const shotsRef = useRef<[number, number][]>([]);
 
   return (
     <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 5, 12], fov: 42 }} style={{ background: "transparent" }}>
@@ -176,7 +267,8 @@ export function MenuScene() {
         ))}
       </Suspense>
 
-      <Director setAnims={setAnims} yawRef={yawRef} />
+      <MenuBullets shotsRef={shotsRef} />
+      <Director setAnims={setAnims} yawRef={yawRef} shotsRef={shotsRef} />
       <Dust />
       <StaticCam />
     </Canvas>
