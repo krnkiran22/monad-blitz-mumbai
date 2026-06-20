@@ -74,7 +74,7 @@ export function ArenaView({
   // Spectator camera: -1 = free orbit, 0..2 = follow that agent's POV.
   const [spectateIndex, setSpectateIndex] = useState(-1);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const stageRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   // Host publishes its chosen map once on entry.
   useEffect(() => {
@@ -115,7 +115,7 @@ export function ArenaView({
   }, []);
 
   const toggleFullscreen = useCallback(() => {
-    const el = stageRef.current;
+    const el = rootRef.current;
     if (!el) return;
     if (!document.fullscreenElement) el.requestFullscreen?.();
     else document.exitFullscreen?.();
@@ -133,7 +133,12 @@ export function ArenaView({
   }, [cycleSpectate, toggleFullscreen]);
 
   useEffect(() => {
-    const onFs = () => setIsFullscreen(!!document.fullscreenElement);
+    const onFs = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      // The arena <canvas> only resizes on a layout/resize event; nudge it so
+      // it shrinks back correctly and the side panel reflows after exiting.
+      setTimeout(() => window.dispatchEvent(new Event("resize")), 80);
+    };
     document.addEventListener("fullscreenchange", onFs);
     return () => document.removeEventListener("fullscreenchange", onFs);
   }, []);
@@ -142,7 +147,7 @@ export function ArenaView({
   const spectateColor = spectateIndex >= 0 ? AGENT_COLORS[spectateIndex] : "#a78bfa";
 
   return (
-    <div className="h-screen monad-bg text-white flex flex-col">
+    <div ref={rootRef} className="h-screen monad-bg text-white flex flex-col">
       <header className="border-b border-[#836ef9]/15 px-6 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">
           <button
@@ -191,7 +196,7 @@ export function ArenaView({
       </header>
 
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        <div ref={stageRef} className="flex-1 min-h-[420px] lg:min-h-0 relative bg-[#0a0613]">
+        <div className="flex-1 min-w-0 min-h-[420px] lg:min-h-0 relative overflow-hidden bg-[#0a0613]">
           <ArenaScene
             onMatchEnd={handleMatchEnd}
             onStats={handleStats}
@@ -352,7 +357,11 @@ export function ArenaView({
           </button>
         </div>
 
-        <div className="w-full lg:w-[340px] shrink-0 border-t lg:border-t-0 lg:border-l border-[#836ef9]/15 overflow-y-auto bg-black/20">
+        <div
+          className={`w-full lg:w-[340px] shrink-0 border-t lg:border-t-0 lg:border-l border-[#836ef9]/15 overflow-y-auto bg-black/20 ${
+            isFullscreen ? "hidden" : ""
+          }`}
+        >
           <div className="p-4 space-y-6">
             <BettingPanel
               arenaState={arenaState}

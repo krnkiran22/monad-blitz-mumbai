@@ -16,7 +16,7 @@ import {
   AGENT_PERSONALITIES,
 } from "../agent/brain";
 import { CharacterSoldier } from "./CharacterSoldier";
-import { GameMap } from "./GameMap";
+import { GameMap, ObstacleBox } from "./GameMap";
 
 export interface ArenaSettings {
   cameraAutoRotate: boolean;
@@ -38,6 +38,54 @@ const RESPAWN_DELAY = 2800; // ms before a downed agent comes back
 export interface MatchStats {
   timeLeft: number;
   kills: number[];
+}
+
+const AGENT_RADIUS = 0.55;
+
+// Is the point inside any obstacle box (with optional inflation)? Used both for
+// bullet hits (y-aware) and agent collision (y ignored via full height span).
+function pointInObstacle(
+  x: number,
+  y: number,
+  z: number,
+  obs: ObstacleBox[],
+  pad = 0
+): boolean {
+  for (const o of obs) {
+    if (
+      x > o.minX - pad &&
+      x < o.maxX + pad &&
+      z > o.minZ - pad &&
+      z < o.maxZ + pad &&
+      y >= o.minY &&
+      y <= o.maxY
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Push an agent out of any obstacle it ends up inside, along the shallowest axis
+// so it slides along container walls instead of passing through them.
+function resolveAgentCollision(pos: { x: number; z: number }, obs: ObstacleBox[]) {
+  for (const o of obs) {
+    const minX = o.minX - AGENT_RADIUS;
+    const maxX = o.maxX + AGENT_RADIUS;
+    const minZ = o.minZ - AGENT_RADIUS;
+    const maxZ = o.maxZ + AGENT_RADIUS;
+    if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ) {
+      const left = pos.x - minX;
+      const right = maxX - pos.x;
+      const down = pos.z - minZ;
+      const up = maxZ - pos.z;
+      const m = Math.min(left, right, down, up);
+      if (m === left) pos.x = minX;
+      else if (m === right) pos.x = maxX;
+      else if (m === down) pos.z = minZ;
+      else pos.z = maxZ;
+    }
+  }
 }
 
 // Floating name label drawn on a 2D canvas → sprite. Avoids drei <Text>
@@ -152,10 +200,12 @@ function AgentSoldier({
 function BulletSystem({
   botsRef,
   bulletsRef,
+  obstaclesRef,
   running,
 }: {
   botsRef: React.MutableRefObject<BotState[]>;
   bulletsRef: React.MutableRefObject<BulletData[]>;
+  obstaclesRef: React.MutableRefObject<ObstacleBox[]>;
   running: boolean;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -193,11 +243,15 @@ function BulletSystem({
     }
 
     // Advance + render the pool.
+    const obstacles = obstaclesRef.current;
     for (let i = 0; i < MAX_BULLETS; i++) {
       const b = bullets[i];
       if (b && b.active) {
         b.pos.addScaledVector(b.vel, dt * 22);
-        if (b.pos.length() > 40) b.active = false;
+        // Despawn when it flies off the arena or slams into a container.
+        if (b.pos.length() > 40 || pointInObstacle(b.pos.x, b.pos.y, b.pos.z, obstacles)) {
+          b.active = false;
+        }
         dummy.current.position.copy(b.pos);
         dummy.current.scale.setScalar(1);
       } else {
@@ -223,12 +277,14 @@ function BulletSystem({
 // the most kills when the clock hits zero wins.
 function HostSimulation({
   botsRef,
+  obstaclesRef,
   running,
   matchSpeed,
   onMatchEnd,
   onStats,
 }: {
   botsRef: React.MutableRefObject<BotState[]>;
+  obstaclesRef: React.MutableRefObject<ObstacleBox[]>;
   running: boolean;
   matchSpeed: number;
   onMatchEnd: (winnerId: number) => void;
@@ -279,9 +335,14 @@ function HostSimulation({
       if (bot.dead && now >= bot.respawnAt) respawnBot(bot);
     });
 
+    const obstacles = obstaclesRef.current;
     bots.forEach((bot, i) => {
       const enemies = bots.filter((_, j) => j !== i);
       tickBot(bot, enemies, dt, now, applyShot);
+      // Keep agents out of solid props; re-clamp to the arena afterwards.
+      if (obstacles.length) resolveAgentCollision(bot.pos, obstacles);
+      bot.pos.x = Math.max(-10, Math.min(10, bot.pos.x));
+      bot.pos.z = Math.max(-10, Math.min(10, bot.pos.z));
     });
 
     // Broadcast a compact snapshot for everyone else in the room.
@@ -410,12 +471,20 @@ export function ArenaScene({
   spectateIndex = -1,
 }: ArenaSceneProps) {
   const botsRef = useRef<BotState[]>(createBots());
+  const obstaclesRef = useRef<ObstacleBox[]>([]);
   const bulletsRef = useRef<BulletData[]>(
     Array.from({ length: MAX_BULLETS }, () => ({
       active: false,
       pos: new THREE.Vector3(0, -1000, 0),
       vel: new THREE.Vector3(),
     }))
+  );
+
+  const handleObstacles = useMemo(
+    () => (boxes: ObstacleBox[]) => {
+      obstaclesRef.current = boxes;
+    },
+    []
   );
 
   // Reset every time a new match begins (host + clients keep their refs aligned).
@@ -445,18 +514,19 @@ export function ArenaScene({
       </mesh>
 
       <Suspense fallback={null}>
-        <GameMap mapFile={mapFile} />
+        <GameMap mapFile={mapFile} onObstacles={handleObstacles} />
       </Suspense>
 
       {[0, 1, 2].map((i) => (
         <AgentSoldier key={i} index={i} botsRef={botsRef} showHealthBar={settings.showHealthBars} />
       ))}
 
-      <BulletSystem botsRef={botsRef} bulletsRef={bulletsRef} running={running} />
+      <BulletSystem botsRef={botsRef} bulletsRef={bulletsRef} obstaclesRef={obstaclesRef} running={running} />
 
       {isHost ? (
         <HostSimulation
           botsRef={botsRef}
+          obstaclesRef={obstaclesRef}
           running={running}
           matchSpeed={settings.matchSpeed}
           onMatchEnd={onMatchEnd}
