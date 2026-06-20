@@ -395,10 +395,11 @@ function CameraRig({ autoRotate }: { autoRotate: boolean }) {
   return (
     <OrbitControls
       makeDefault
-      target={[0, 1, 0]}
-      minDistance={8}
-      maxDistance={45}
-      maxPolarAngle={Math.PI / 2.1}
+      target={[0, 0, 0]}
+      minDistance={14}
+      maxDistance={32}
+      minPolarAngle={Math.PI / 6}
+      maxPolarAngle={Math.PI / 3}
       enablePan={false}
       autoRotate={autoRotate}
       autoRotateSpeed={0.5}
@@ -496,7 +497,7 @@ export function ArenaScene({
   }, [running, isHost]);
 
   return (
-    <Canvas shadows camera={{ position: [0, 16, 26], fov: 50 }} style={{ background: "#0a0613" }}>
+    <Canvas shadows camera={{ position: [0, 28, 20], fov: 42 }} style={{ background: "#0a0613" }}>
       <ambientLight intensity={1.1} />
       <hemisphereLight intensity={0.7} groundColor="#1a1033" color="#ffffff" />
       <directionalLight position={[12, 24, 8]} intensity={2} castShadow shadow-mapSize={[2048, 2048]}>
