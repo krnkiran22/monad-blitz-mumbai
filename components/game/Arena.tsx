@@ -87,8 +87,10 @@ function AgentSoldier({
     const bot = botsRef.current[index];
     if (!bot || !posGroup.current || !rotGroup.current) return;
 
+    // Group stays on the ground (ring/labels); only the soldier model jumps.
     posGroup.current.position.set(bot.pos.x, 0, bot.pos.z);
     rotGroup.current.rotation.y = bot.angle;
+    rotGroup.current.position.y = bot.pos.y;
 
     const nextAnim = botAnimation(bot);
     if (nextAnim !== anim) setAnim(nextAnim);
@@ -224,9 +226,17 @@ function HostSimulation({
   const lastBroadcast = useRef(0);
 
   // Damage application only — bullet visuals are handled by BulletSystem.
+  // Distance-based accuracy + modest damage keeps fights lasting long enough
+  // to actually watch the agents run, strafe, jump and take cover.
   const applyShot = (from: BotState, target: BotState) => {
-    const dmg = from.personality.weapon === "Sniper" ? 25 : from.personality.weapon === "SMG" ? 8 : 12;
-    target.health = Math.max(0, target.health - dmg);
+    const d = Math.hypot(target.pos.x - from.pos.x, target.pos.z - from.pos.z);
+    const baseDmg = from.personality.weapon === "Sniper" ? 16 : from.personality.weapon === "SMG" ? 5 : 7;
+    // Closer shots are more accurate; a crouched target is harder to hit.
+    let hitChance = Math.max(0.18, Math.min(0.8, 1 - d / 26));
+    if (target.crouching) hitChance *= 0.45;
+    if (target.pos.y > 0.3) hitChance *= 0.6; // mid-air dodge
+    if (Math.random() > hitChance) return; // miss
+    target.health = Math.max(0, target.health - baseDmg);
     if (target.health <= 0) target.dead = true;
   };
 
