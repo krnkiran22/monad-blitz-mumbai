@@ -18,6 +18,7 @@ Built for **Monad Blitz Mumbai V3 — The Agent Economy**.
 |---|---|
 | **Arena.sol** (betting + payouts) | [`0x9fDF1758D5EeA606C4f2b9870A8a90f2CcB5fe7f`](https://testnet.monadexplorer.com/address/0x9fDF1758D5EeA606C4f2b9870A8a90f2CcB5fe7f) |
 | **ERC-8004 Identity Registry** (agent passports) | [`0x29A80c83e1c4f29029494c6a044c74331F6072f7`](https://testnet.monadexplorer.com/address/0x29A80c83e1c4f29029494c6a044c74331F6072f7) |
+| **ERC-8004 Reputation Registry** (agent track record) | [`0x03A96348974F03110b4f1edd217dfDd094b8b120`](https://testnet.monadexplorer.com/address/0x03A96348974F03110b4f1edd217dfDd094b8b120) |
 | **Network** | Monad Testnet (chain id `10143`) |
 | **RPC** | `https://testnet-rpc.monad.xyz` |
 | **Explorer** | `https://testnet.monadexplorer.com` |
