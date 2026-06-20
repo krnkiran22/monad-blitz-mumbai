@@ -3,9 +3,15 @@
 import { Suspense, useRef, useState, useEffect } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Environment, Float } from "@react-three/drei";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
 import { CharacterSoldier } from "./CharacterSoldier";
 import { AGENT_PERSONALITIES } from "../agent/brain";
+
+// Same over-bright hotpink tracer the gameplay uses, so it blooms into a
+// glowing "fire" streak under the EffectComposer pass.
+const MENU_BULLET_MATERIAL = new THREE.MeshBasicMaterial({ color: "hotpink", toneMapped: false });
+MENU_BULLET_MATERIAL.color.multiplyScalar(42);
 
 // Three agents in a line; 0 = left (red), 1 = middle (blue), 2 = right (green).
 const HERO_POS: [number, number, number][] = [
@@ -155,9 +161,8 @@ function MenuBullets({ shotsRef }: { shotsRef: React.MutableRefObject<[number, n
 
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, MENU_MAX_BULLETS]} frustumCulled={false}>
-      <sphereGeometry args={[0.17, 10, 10]} />
-      {/* Solid bright orange (not additive) so it stays visible on the light card. */}
-      <meshBasicMaterial color="#ff5a00" toneMapped={false} />
+      <boxGeometry args={[0.07, 0.07, 0.5]} />
+      <primitive object={MENU_BULLET_MATERIAL} attach="material" />
     </instancedMesh>
   );
 }
@@ -271,6 +276,12 @@ export function MenuScene() {
       <Director setAnims={setAnims} yawRef={yawRef} shotsRef={shotsRef} />
       <Dust />
       <StaticCam />
+
+      {/* High threshold so only the over-bright (x42) tracers bloom — the
+          brightly-lit soldiers stay crisp instead of washing out. */}
+      <EffectComposer>
+        <Bloom luminanceThreshold={2.5} intensity={1.1} mipmapBlur />
+      </EffectComposer>
     </Canvas>
   );
 }

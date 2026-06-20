@@ -3,8 +3,10 @@
 import { useRef, useState, useEffect, useMemo, Suspense } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Environment, Billboard } from "@react-three/drei";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import { getState, setState } from "playroomkit";
 import * as THREE from "three";
+import { playSfx, SFX } from "../frd/sfx";
 import {
   createBots,
   tickBot,
@@ -42,6 +44,11 @@ export interface MatchStats {
 
 const AGENT_RADIUS = 0.55;
 const BULLET_FORWARD = new THREE.Vector3(0, 0, 1);
+
+// Over-bright hotpink tracer (matches the home screen + friends mode); blooms
+// into a glowing fire streak against the dark arena.
+const ARENA_BULLET_MATERIAL = new THREE.MeshBasicMaterial({ color: "hotpink", toneMapped: false });
+ARENA_BULLET_MATERIAL.color.multiplyScalar(42);
 
 // Is the point inside any obstacle box (with optional inflation)? Used both for
 // bullet hits (y-aware) and agent collision (y ignored via full height span).
@@ -145,12 +152,18 @@ function AgentSoldier({
   const posGroup = useRef<THREE.Group>(null);
   const rotGroup = useRef<THREE.Group>(null);
   const healthBar = useRef<THREE.Mesh>(null);
+  const wasDead = useRef(false);
   const [anim, setAnim] = useState("Idle");
   const personality = AGENT_PERSONALITIES[index];
 
   useFrame((_, rawDelta) => {
     const bot = botsRef.current[index];
     if (!bot || !posGroup.current || !rotGroup.current) return;
+
+    // Death cry on the alive→dead transition (works for host + spectators since
+    // it reads the synced bot state).
+    if (bot.dead && !wasDead.current) playSfx(SFX.dead, 0.45);
+    wasDead.current = bot.dead;
 
     const dt = Math.min(rawDelta, 0.05);
     const k = Math.min(1, dt * 16); // frame-rate-independent smoothing
@@ -231,6 +244,7 @@ function BulletSystem({
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useRef(new THREE.Object3D());
   const lastFire = useRef<number[]>([0, 0, 0]);
+  const lastGun = useRef(0);
 
   useFrame((_, rawDelta) => {
     const mesh = meshRef.current;
@@ -259,6 +273,12 @@ function BulletSystem({
         bullets[slot].active = true;
         bullets[slot].pos.set(bot.pos.x, 1.2, bot.pos.z);
         bullets[slot].vel.copy(dir);
+
+        // Globally-throttled gunshot so 3 bots read as a firefight, not noise.
+        if (now - lastGun.current > 95) {
+          lastGun.current = now;
+          playSfx(SFX.rifle, 0.16);
+        }
       });
     }
 
@@ -287,9 +307,9 @@ function BulletSystem({
   });
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, MAX_BULLETS]}>
-      <sphereGeometry args={[0.16, 10, 10]} />
-      <meshBasicMaterial color="#fff27a" toneMapped={false} blending={THREE.AdditiveBlending} />
+    <instancedMesh ref={meshRef} args={[undefined, undefined, MAX_BULLETS]} frustumCulled={false}>
+      <boxGeometry args={[0.08, 0.08, 0.5]} />
+      <primitive object={ARENA_BULLET_MATERIAL} attach="material" />
     </instancedMesh>
   );
 }
@@ -571,6 +591,12 @@ export function ArenaScene({
       ) : (
         <CameraRig autoRotate={settings.cameraAutoRotate && !running} />
       )}
+
+      {/* Glow pass: the over-bright tracers bloom into fire on the dark arena.
+          Threshold kept above lit-surface luminance so only bullets glow. */}
+      <EffectComposer>
+        <Bloom luminanceThreshold={1.2} intensity={1.4} mipmapBlur />
+      </EffectComposer>
     </Canvas>
   );
 }
